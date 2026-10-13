@@ -1,0 +1,62 @@
+[app]
+name = "计算机赛事雷达"
+timezone = "Asia/Shanghai"
+
+[paths]
+data = "data"
+raw = "data/raw"
+outbox = "outbox"
+catalog = "data/catalog_ynu_2026.json"
+# 上一版目录：用于判断"2025 目录有、2026 目录没有"的竞赛（细则规定按降一级处理）
+catalog_prev = "data/catalog_ynu_2025.json"
+candidates = "data/candidates.json"
+db = "data/radar.db"
+szcp = "data/szcp_ynu.json"
+szcp_college = "data/szcp_college.json"
+
+[http]
+user_agent = "CompRadarYNU/0.1 (undergraduate competition radar; personal research use)"
+timeout_seconds = 25
+min_host_interval_seconds = 1.2
+max_retries = 3
+cache_ttl_hours = 6
+save_raw = true
+
+[run]
+# only consider notices published within this window
+lookback_days = 400
+# max detail pages fetched per run (keeps a run short and polite)
+detail_limit = 70
+# max result pages per search engine
+search_pages = 2
+
+[notify]
+# 渠道：file（只写文件）| wecom（企业微信机器人）| serverchan（Server酱）| email（SMTP）
+enabled = false
+channel = "file"
+# 先干跑：内容会渲染出来但不真正发送。确认无误后改成 false。
+dry_run = true
+# 单条提醒最多带几条赛事，超出部分只提示去看文件
+max_items = 10
+
+[notify.wecom]
+# 企业微信机器人 Webhook 地址放在环境变量里，不写进配置文件
+webhook_env = "COMPRADAR_WECOM_WEBHOOK"
+
+[notify.serverchan]
+key_env = "COMPRADAR_SERVERCHAN_KEY"
+
+[notify.email]
+host = ""
+port = 465
+use_ssl = true
+username_env = "COMPRADAR_SMTP_USER"
+password_env = "COMPRADAR_SMTP_PASS"
+from_addr = ""
+to_addrs = []
+
+[llm]
+# optional fallback extractor; disabled by default so that no key is required
+enabled = false
+provider = ""
+model = ""

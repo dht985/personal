@@ -1,0 +1,55 @@
+# 采集源清单。authority 表示来源可信度：official=官方渠道，org=主办方/学会，aggregator=聚合站。
+
+[[source]]
+id = "ynu_bksy"
+name = "云南大学本科生院（教务处）"
+authority = "official"
+scope = "ynu"
+parser = "boda_list"
+note = "学校学科竞赛主管单位，竞赛通知主发布口"
+list_urls = [
+  "https://jwc.ynu.edu.cn/sjjxk.htm",
+  "https://jwc.ynu.edu.cn/index.htm",
+  "https://jwc.ynu.edu.cn/zysw/xkjs_.htm",
+]
+# 实践教学科栏目分页形如 sjjxk/43.htm，页码越小越旧
+pagination = { discover = "sjjxk/(\\d+)\\.htm", url_template = "https://jwc.ynu.edu.cn/sjjxk/{page}.htm", max_pages = 8 }
+item_regex = "/info/\\d+/\\d+\\.htm"
+
+[[source]]
+id = "ynu_sei"
+name = "云南大学软件学院（人工智能学院）"
+authority = "official"
+scope = "ynu"
+parser = "boda_list"
+note = "计算机类赛事校赛组织学院"
+list_urls = [
+  "http://www.sei.ynu.edu.cn/xwgg/tzgg.htm",
+  "http://www.sei.ynu.edu.cn/xwgg/xyxw.htm",
+]
+item_regex = "/info/\\d+/\\d+\\.htm"
+
+[[source]]
+id = "cahe"
+name = "中国高等教育学会·竞赛工作"
+authority = "org"
+scope = "national"
+parser = "generic_list"
+note = "全国普通高校大学生竞赛分析报告发布方"
+list_urls = [
+  "https://www.cahe.edu.cn/site/term/906.html",
+]
+item_regex = "/site/content/\\d+\\.html"
+
+[[source]]
+id = "ynu_ise"
+name = "云南大学信息学院"
+authority = "official"
+scope = "ynu"
+parser = "generic_list"
+note = "计算机科学与工程系所在学院，目录中多项赛事由该院承办"
+list_urls = [
+  "https://www.ise.ynu.edu.cn/news-list/3/",
+  "https://www.ise.ynu.edu.cn/news-list/11/",
+]
+item_regex = "/page/\\d+/"

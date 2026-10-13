@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>计算机赛事雷达</title>
+<style>
+  :root{
+    --bg:#f4f6f9; --panel:#ffffff; --line:#e3e8ef; --text:#1f2937; --muted:#6b7280;
+    --focus:#c0392b; --potential:#1f6feb; --low:#6b7280;
+    --c1:#c0392b; --c2:#e08c3a; --c3:#1f6feb; --c4:#3fa06a; --c5:#8e6bd0; --c6:#59a5c9;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font-family:"Microsoft YaHei","PingFang SC","Hiragino Sans GB",system-ui,sans-serif;
+       font-size:14px;line-height:1.6}
+  header{background:#111827;color:#fff;padding:18px 24px}
+  header h1{margin:0;font-size:19px;font-weight:600;letter-spacing:.5px}
+  header .sub{color:#9ca3af;font-size:12px;margin-top:4px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .chip{background:#1f2937;border:1px solid #374151;border-radius:999px;
+        padding:3px 12px;font-size:12px;color:#d1d5db}
+  .chip b{color:#fff;font-weight:600}
+  .wrap{max-width:1400px;margin:0 auto;padding:20px 24px 60px}
+  .toolbar{position:sticky;top:0;z-index:20;background:var(--bg);padding:12px 0;
+           display:flex;flex-wrap:wrap;gap:10px;align-items:center;border-bottom:1px solid var(--line)}
+  .tabs{display:flex;gap:6px}
+  .tab{border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 14px;
+       cursor:pointer;font-size:13px;color:var(--muted)}
+  .tab.active{background:#111827;color:#fff;border-color:#111827}
+  input[type=search],select{border:1px solid var(--line);background:#fff;border-radius:8px;
+       padding:7px 10px;font-size:13px;color:var(--text);min-width:150px}
+  input[type=search]{min-width:240px}
+  .grow{flex:1}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px;margin-top:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;
+        cursor:pointer;transition:.15s;display:flex;flex-direction:column;gap:8px}
+  .card:hover{box-shadow:0 6px 18px rgba(17,24,39,.10);transform:translateY(-1px)}
+  .card h3{margin:0;font-size:15px;font-weight:600;line-height:1.4}
+  .badges{display:flex;flex-wrap:wrap;gap:6px}
+  .badge{font-size:11px;border-radius:6px;padding:2px 8px;border:1px solid var(--line);color:var(--muted);background:#fafbfc}
+  .badge.t-focus{background:#fdecea;border-color:#f5c6c2;color:var(--focus)}
+  .badge.t-potential{background:#eaf1fd;border-color:#c3d7f8;color:var(--potential)}
+  .badge.t-low{background:#f3f4f6;border-color:#e5e7eb;color:var(--low)}
+  .bar{height:7px;border-radius:4px;background:#eef1f5;overflow:hidden;display:flex}
+  .bar i{display:block;height:100%}
+  .kv{display:grid;grid-template-columns:72px 1fr;gap:2px 8px;font-size:12.5px}
+  .kv dt{color:var(--muted)}
+  .kv dd{margin:0}
+  .ev{font-size:12px;color:#4b5563;background:#f8fafc;border-left:3px solid #cbd5e1;
+      padding:6px 9px;border-radius:0 6px 6px 0}
+  .score{margin-left:auto;font-size:20px;font-weight:700;color:#111827}
+  .row{display:flex;align-items:center;gap:8px}
+  section{margin-top:34px}
+  section > h2{font-size:15px;font-weight:600;margin:0 0 10px;padding-bottom:6px;border-bottom:2px solid #111827;display:inline-block}
+  table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  th,td{text-align:left;padding:8px 12px;font-size:12.5px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#f9fafb;color:var(--muted);font-weight:500}
+  tr:last-child td{border-bottom:none}
+  a{color:#1f6feb;text-decoration:none;word-break:break-all}
+  a:hover{text-decoration:underline}
+  .empty{color:var(--muted);font-size:13px;padding:10px 0}
+  dialog{border:none;border-radius:14px;padding:0;max-width:880px;width:92vw;max-height:88vh;
+         box-shadow:0 24px 60px rgba(0,0,0,.28)}
+  dialog::backdrop{background:rgba(17,24,39,.55)}
+  .modal-h{position:sticky;top:0;background:#fff;border-bottom:1px solid var(--line);
+           padding:16px 22px;display:flex;align-items:flex-start;gap:12px}
+  .modal-h h2{margin:0;font-size:17px}
+  .modal-b{padding:18px 22px 26px;overflow:auto;max-height:calc(88vh - 76px)}
+  .close{margin-left:auto;border:none;background:#f3f4f6;border-radius:8px;width:30px;height:30px;
+         cursor:pointer;font-size:16px;color:#4b5563}
+  .dim{display:grid;grid-template-columns:150px 90px 1fr;gap:6px 10px;padding:7px 0;border-bottom:1px dashed var(--line)}
+  .dim .lbl{font-weight:600}
+  .dim .st{font-size:11px;color:var(--muted)}
+  .pill{font-size:11px;padding:1px 7px;border-radius:999px;background:#eef1f5;color:#4b5563}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:8px}
+  .legend span i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px}
+  .muted{color:var(--muted);font-size:12px}
+  ul.plain{margin:6px 0;padding-left:18px}
+  ul.plain li{margin:2px 0;font-size:12.5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>计算机赛事雷达 · 云南大学计算机专业本科生</h1>
+  <div class="sub" id="sub"></div>
+  <div class="chips" id="chips"></div>
+</header>
+<div class="wrap">
+  <div class="toolbar">
+    <div class="tabs" id="tabs"></div>
+    <input type="search" id="q" placeholder="搜索赛事名、通知标题、主办方…">
+    <select id="fcat"><option value="">全部目录类别</option></select>
+    <select id="ffit"><option value="">全部适配度</option></select>
+    <select id="fdl"><option value="">全部截止状态</option></select>
+    <select id="sort">
+      <option value="score">按总分排序</option>
+      <option value="deadline">按报名截止排序</option>
+      <option value="name">按名称排序</option>
+    </select>
+    <span class="grow"></span>
+    <span class="muted" id="count"></span>
+  </div>
+  <div class="grid" id="grid"></div>
+  <div class="empty" id="noresult" style="display:none">没有符合筛选条件的赛事。</div>
+
+  <section>
+    <h2>变化与提醒</h2>
+    <div id="changes"></div>
+    <div id="pushes" style="margin-top:14px"></div>
+  </section>
+
+  <section>
+    <h2 id="disc-h">主动发现通道命中</h2>
+    <div id="discovery"></div>
+  </section>
+
+  <section>
+    <h2>说明与局限</h2>
+    <div class="ev" id="notes"></div>
+    <div class="legend">
+      <span><i style="background:var(--c1)"></i>目录认定</span>
+      <span><i style="background:var(--c2)"></i>主办方层级</span>
+      <span><i style="background:var(--c3)"></i>专业适配度</span>
+      <span><i style="background:var(--c4)"></i>时效性</span>
+      <span><i style="background:var(--c5)"></i>综测赋分</span>
+      <span><i style="background:var(--c6)"></i>历年组织</span>
+    </div>
+  </section>
+</div>
+
+<dialog id="modal">
+  <div class="modal-h">
+    <div><h2 id="m-title"></h2><div class="muted" id="m-sub"></div></div>
+    <button class="close" onclick="document.getElementById('modal').close()">×</button>
+  </div>
+  <div class="modal-b" id="m-body"></div>
+</dialog>
+
+<script>
+const DATA = /*__DATA__*/;
+const TIER_CLASS = {"重点关注":"t-focus","潜在机会":"t-potential","低优先级/证据不足":"t-low"};
+const DIM_COLORS = {"catalog":"var(--c1)","organizer":"var(--c2)","cs_fit":"var(--c3)",
+                    "timeliness":"var(--c4)","acceptance":"var(--c5)","history":"var(--c6)"};
+const esc = s => String(s==null?"":s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+document.getElementById("sub").textContent =
+  `生成时间 ${DATA.generated_at} ｜ 认定目录：${DATA.catalog.title}（${DATA.catalog.count} 项）`;
+document.getElementById("chips").innerHTML = DATA.chips
+  .map(c => `<span class="chip">${esc(c[0])} <b>${esc(c[1])}</b></span>`).join("");
+document.getElementById("notes").innerHTML = DATA.notes.map(n => `· ${esc(n)}`).join("<br>");
+
+let tier = "全部";
+document.getElementById("tabs").innerHTML =
+  ["全部","重点关注","潜在机会","低优先级/证据不足"]
+    .map(t => `<button class="tab${t===tier?" active":""}" data-tier="${esc(t)}">${esc(t)}<span class="muted"> ${t==="全部"?DATA.records.length:(DATA.tier_counts[t]||0)}</span></button>`)
+    .join("");
+document.querySelectorAll(".tab").forEach(b => b.onclick = () => {
+  tier = b.dataset.tier;
+  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("active", x === b));
+  render();
+});
+
+function fill(id, key){
+  const vals = [...new Set(DATA.records.map(r => r[key]).filter(Boolean))];
+  document.getElementById(id).insertAdjacentHTML("beforeend",
+    vals.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join(""));
+}
+fill("fcat","catalog_category"); fill("ffit","cs_fit"); fill("fdl","deadline_status");
+["q","fcat","ffit","fdl","sort"].forEach(id => document.getElementById(id).oninput = render);
+
+function bar(r){
+  const total = r.dimensions.reduce((s,d)=>s+Math.max(0,d.score),0) || 1;
+  return `<div class="bar">${r.dimensions.filter(d=>d.score>0).map(d =>
+    `<i style="width:${(d.score/total*100).toFixed(1)}%;background:${DIM_COLORS[d.key]||'#999'}"
+        title="${esc(d.label)} ${d.score} 分"></i>`).join("")}</div>`;
+}
+
+function card(r){
+  const tc = TIER_CLASS[r.tier] || "t-low";
+  const ev = (r.registration_evidence[0]||{}).evidence || "";
+  return `<div class="card" data-key="${esc(r.key)}">
+    <div class="row">
+      <h3>${esc(r.name)}</h3>
+      <div class="score">${esc(r.score_total)}</div>
+    </div>
+    <div class="badges">
+      <span class="badge ${tc}">${esc(r.tier)}</span>
+      <span class="badge">目录 ${esc(r.catalog_category || "未收录")}</span>
+      <span class="badge">适配 ${esc(r.cs_fit)}</span>
+      <span class="badge">${esc(r.deadline_status)}</span>
+      ${r.szcp_estimate ? `<span class="badge" title="${esc(r.szcp_estimate.formula)}">综测加分 ${esc(r.szcp_estimate.capped)}/${esc(r.szcp_estimate.cap)}</span>` : ""}
+    </div>
+    ${bar(r)}
+    <dl class="kv">
+      <dt>报名截止</dt><dd>${esc(r.registration_last || "通知中未写明")}</dd>
+      <dt>层级状态</dt><dd>${esc(r.deadline_detail)}</dd>
+      <dt>通知来源</dt><dd>${r.primary_url ? `<a href="${esc(r.primary_url)}" target="_blank" rel="noopener">${esc(r.primary_source||"链接")}</a>` : "—"}</dd>
+    </dl>
+    ${ev ? `<div class="ev">原文：「${esc(ev.slice(0,120))}」</div>` : ""}
+    <div class="muted">${esc(r.tier_reason)}</div>
+  </div>`;
+}
+
+function render(){
+  const q = document.getElementById("q").value.trim().toLowerCase();
+  const fc = document.getElementById("fcat").value;
+  const ff = document.getElementById("ffit").value;
+  const fd = document.getElementById("fdl").value;
+  const sort = document.getElementById("sort").value;
+
+  let rows = DATA.records.filter(r =>
+    (tier === "全部" || r.tier === tier) &&
+    (!fc || r.catalog_category === fc) &&
+    (!ff || r.cs_fit === ff) &&
+    (!fd || r.deadline_status === fd) &&
+    (!q || (r.name + " " + r.search_text).toLowerCase().includes(q)));
+
+  rows.sort((a,b) =>
+    sort === "name" ? a.name.localeCompare(b.name,"zh") :
+    sort === "deadline" ? (a.registration_last||"9999").localeCompare(b.registration_last||"9999") :
+    (b.score_total - a.score_total));
+
+  document.getElementById("grid").innerHTML = rows.map(card).join("");
+  document.getElementById("count").textContent = `显示 ${rows.length} / ${DATA.records.length} 个赛事`;
+  document.getElementById("noresult").style.display = rows.length ? "none" : "block";
+  document.querySelectorAll(".card").forEach(el => el.onclick = () => openDetail(el.dataset.key));
+}
+
+function openDetail(key){
+  const r = DATA.records.find(x => x.key === key); if(!r) return;
+  document.getElementById("m-title").textContent = r.name;
+  document.getElementById("m-sub").innerHTML =
+    `${esc(r.tier)} ｜ 总分 ${esc(r.score_total)} ｜ ${esc(r.tier_reason)}`;
+  const dims = r.dimensions.map(d => `<div class="dim">
+      <div class="lbl">${esc(d.label)}</div>
+      <div><span class="pill">${esc(d.status)}</span> ${esc(d.score)} 分</div>
+      <div>${esc(d.detail)}
+        ${(d.evidence||[]).map(e => e.quote ? `<div class="ev">原文：「${esc(e.quote)}」</div>` : "").join("")}
+        ${(d.evidence||[]).map(e => e.url ? `<div><a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.url)}</a></div>` : "").join("")}
+      </div></div>`).join("");
+  const notices = r.notices.length ? `<ul class="plain">${r.notices.map(n =>
+      `<li>${esc(n.source_name||"")} ｜ ${esc(n.title||"")} ${n.published_at?`（${esc(n.published_at)}）`:""}
+       <br><a href="${esc(n.url)}" target="_blank" rel="noopener">${esc(n.url)}</a></li>`).join("")}</ul>`
+    : `<div class="empty">没有关联通知</div>`;
+  const evs = r.registration_evidence.length
+    ? r.registration_evidence.map(e => `<div class="ev">原文：「${esc(e.evidence)}」</div>`).join("")
+    : `<div class="empty">未从原文抽到报名时间</div>`;
+  const ach = (r.achievements||[]).length
+    ? `<ul class="plain">${r.achievements.map(a => `<li><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.title)}</a>（${esc(a.published_at||"日期未知")}）</li>`).join("")}</ul>`
+    : `<div class="empty">未检索到该校赛的获奖新闻</div>`;
+  document.getElementById("m-body").innerHTML = `
+    <h3>报名时间与原文依据</h3>${evs}
+    <h3 style="margin-top:18px">分维度判断（互不替代）</h3>${dims}
+    ${r.szcp_estimate ? `<h3 style="margin-top:18px">综测加分估算</h3>
+      <div class="ev">按「${esc(r.szcp_estimate.level)}${esc(r.szcp_estimate.award)} + 团队排名${esc(r.szcp_estimate.rank)}」计算：
+      ${esc(r.szcp_estimate.formula)}（本项上限 ${esc(r.szcp_estimate.cap)} 分）
+      ${r.szcp_estimate.downgraded_from ? `<br>该赛事未列入 2026 版目录，按细则降一级处理：${esc(r.szcp_estimate.downgraded_from)} → ${esc(r.szcp_estimate.category)}` : ""}
+      </div>` : ""}
+    <h3 style="margin-top:18px">主要风险</h3>
+    ${r.risks.length ? `<ul class="plain">${r.risks.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>` : `<div class="empty">无明显风险项</div>`}
+    <h3 style="margin-top:18px">下一步行动</h3>
+    <ul class="plain">${r.next_actions.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>
+    <h3 style="margin-top:18px">往届获奖情况</h3>${ach}
+    <h3 style="margin-top:18px">学生评价</h3>
+    <div class="empty">未找到足够可靠的公开评价（本项目不会为了凑材料生成主观评价）</div>
+    <h3 style="margin-top:18px">全部来源</h3>${notices}
+    <div class="muted" style="margin-top:14px">
+      首次发现 ${esc(r.first_seen)} ｜ 最近核验 ${esc(r.last_verified)} ｜ 来源可信度 ${esc(r.authority)}
+      ${r.history_years.length ? `｜ 历年通知覆盖 ${esc(r.history_years.join("、"))}` : ""}
+    </div>`;
+  document.getElementById("modal").showModal();
+}
+
+function table(head, rows){
+  if(!rows.length) return `<div class="empty">暂无记录</div>`;
+  return `<table><thead><tr>${head.map(h=>`<th>${esc(h)}</th>`).join("")}</tr></thead>
+    <tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+}
+document.getElementById("changes").innerHTML = table(["时间","类型","赛事","变化"],
+  DATA.changes.map(c => [esc(c.time), esc(c.type), esc(c.name), esc(c.detail)]));
+document.getElementById("pushes").innerHTML = table(["时间","类型","标题","状态"],
+  DATA.pushes.map(p => [esc(p.time), esc(p.type), esc(p.title), esc(p.status)]));
+document.getElementById("discovery").innerHTML = table(["标题","匹配目录","真实链接"],
+  DATA.discovery.map(d => [esc(d.title),
+    `<span class="badge">${esc(d.catalog_category||"未收录")}</span>`,
+    `<a href="${esc(d.real_url)}" target="_blank" rel="noopener">${esc(d.real_url)}</a>`]));
+document.getElementById("disc-h").textContent =
+  `主动发现通道命中（显示 ${DATA.discovery.length} / 共 ${DATA.discovery_total} 条，完整清单见 data/candidates.json）`;
+
+render();
+</script>
+</body>
+</html>

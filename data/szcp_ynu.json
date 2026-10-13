@@ -1,0 +1,45 @@
+{
+  "meta": {
+    "title": "云南大学本科学生综合素质测评办法（校级规则）",
+    "document_no": "云大学〔2020〕2号",
+    "curated_at": "2026-10-13",
+    "curation_note": "本文件由人工从官方文件整理，只记录原文明确写了的内容，不含推测。",
+    "sources": [
+      {
+        "role": "校级办法引用出处",
+        "url": "http://www.xsjzwh.ynu.edu.cn/info/1019/2264.htm",
+        "publisher": "云南大学学生工作部",
+        "published": "2021-09-04",
+        "quote": "请各学生培养单位分别组织学生学习《云南大学本科学生综合素质测评办法》（云大学〔2020〕2号）"
+      },
+      {
+        "role": "较新的测评工作通知",
+        "url": "http://www.xsjzwh.ynu.edu.cn/info/1019/2726.htm",
+        "publisher": "云南大学奖助文化网",
+        "published": "2024",
+        "quote": "关于开展2023-2024学年学生综合素质测评工作的通知"
+      },
+      {
+        "role": "官方附件《云南大学本科学生综合素质测评表》",
+        "url": "http://www.xsjzwh.ynu.edu.cn/system/_content/download.jsp?urltype=news.DownloadAttachUrl&owner=1344356920&wbfileid=6461871",
+        "local_file": "data/raw/szcp_table.docx",
+        "note": "已下载解析"
+      }
+    ]
+  },
+  "structure": {
+    "思想品德分G1": "（G11+G12）×10%",
+    "学科专业分G2": "G21×80% + G22；G21（0-100）为课程加权平均分，G22（0-5）为加分项",
+    "体育分G3": "（G31+G32）×3%",
+    "实践拓展分G4": "（G41+G42+G43）×7%",
+    "总成绩": "G1+G2+G3+G4，超过 100 分按 100 分计"
+  },
+  "competition_bonus": {
+    "module": "学科专业分 G2 下的 G22 加分项（科研创新创业实践）",
+    "cap": 5,
+    "quote": "各学院要认真梳理和细化学科专业分模块中的科研创新创业实践加分项的各项分值，切实做到公平公正科学合理。",
+    "quote_source": "http://www.xsjzwh.ynu.edu.cn/info/1019/2264.htm",
+    "verified_conclusion": "学科竞赛获奖属于「科研创新创业实践」加分项，落在 G22 模块，该模块上限 5 分。",
+    "open_question": "具体赛事、获奖等级对应多少分由各学院实施细则规定；公开官方渠道未检索到软件学院/信息学院细则原文。"
+  }
+}

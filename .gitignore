@@ -1,0 +1,28 @@
+# 采集缓存与原始快照：体积大、可重新抓取，不进版本库
+data/raw/
+
+# 运行产物
+outbox/
+data/radar.db
+data/radar.db-wal
+data/radar.db-shm
+data/candidates.json
+data/demo/
+
+# 早期侦察阶段的临时输出
+data/recon_report.json
+data/search_probe.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 编辑器与系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
