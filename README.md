@@ -7,6 +7,18 @@
 
 <sub>筛选、搜索、排序、分数构成条形图、详情弹窗，见 [docs/screenshots](docs/screenshots)。</sub>
 
+## 当前运行状态
+
+| 项目 | 状态 |
+| --- | --- |
+| 计划任务 | 已注册 `CompRadar-Weekly`，每周一 09:00 自动运行，日志在 `outbox/run.log` |
+| 推送渠道 | 已启用 Windows 桌面通知（零配置）；企业微信 / Server酱 / 邮件待填密钥 |
+| 认定目录 | 《学校认定本科生学科竞赛目录（2026版）》111 项，保留 2025 版用于降级判断 |
+| 综测规则 | 已接入《2023 级计科综合评测细则》，可逐赛事算出加分 |
+| 自检 | `python -m radar doctor` 全部通过 |
+
+换机器或过一段时间后想确认还能不能跑，先执行一次 `python -m radar doctor`。
+
 ## 一、它解决什么问题
 
 1. **发现**：除了你已经知道的比赛，还通过官方栏目 + 主动检索通道去找新的赛事。
@@ -28,6 +40,9 @@ python -m radar verify
 
 # 4. 打开仪表盘
 python -m radar dashboard --open
+
+# 5. 启用自检（逐项确认依赖、目录、规则、数据库、推送、定时任务）
+python -m radar doctor
 ```
 
 跑完后 `data/radar.db` 是空的、`data/raw/` 也没有缓存，第一次运行会联网抓取约 300 个页面，
@@ -59,9 +74,12 @@ python -m radar dashboard --open
 | `python -m radar db --pushes` | 查看数据库总量、最近变化与提醒记录 |
 | `python -m radar notify` | 检查通知配置并预览待推送内容 |
 | `python -m radar notify --test` | 真实发送一条测试消息（用于验证渠道配置） |
+| `python -m radar notify --redeliver 3` | 把最近 3 条提醒重新投递一次（换渠道后补发） |
+| `python -m radar doctor` | 启用自检：逐项确认各组件是否真的可用 |
 | `python -m radar dashboard --open` | 重新生成网页仪表盘并打开 |
 | `python tools/demo_change_detection.py` | 独立演示库，演示"日期变化被检出 + 只推一次" |
 | `python tools/demo_notify.py` | 用本地接收端演示推送正文长什么样 |
+| `python tools/check_toast.py` | 验证桌面通知是否真的进了系统通知中心 |
 | `python tools/render_dashboard.py` | 用真实浏览器渲染仪表盘、检查 JS 报错并截图 |
 | `powershell -File scripts/install_task.ps1` | 注册每周一 09:00 自动运行的计划任务（需管理员） |
 
@@ -69,7 +87,26 @@ python -m radar dashboard --open
 
 ### 开通推送
 
-默认是关着的，只写文件。要真正收到消息，改 `config/settings.toml`：
+### 桌面通知（零配置，默认已启用）
+
+`channel = "toast"` 不需要任何账号或密钥：每周运行后，如果有需要行动的信息，
+右下角会弹一条 Windows 通知，点它直接打开仪表盘。
+
+```toml
+[notify]
+enabled = true
+channel = "toast"
+dry_run = false
+```
+
+一个坑值得记下来：**用自造的 AppUserModelID 发 toast，API 不会报错，但通知会被系统静默丢弃**。
+本项目借用已注册的 Windows PowerShell 身份发送，并用
+`python tools/check_toast.py` 到系统通知数据库（`wpndatabase.db`）里核对记录数确实增加了，
+而不是只看有没有抛异常。
+
+### 手机推送（需要你提供密钥）
+
+想推到手机上，改 `config/settings.toml`：
 
 ```toml
 [notify]

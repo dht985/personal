@@ -145,6 +145,25 @@ def cmd_status(args) -> int:
     return 0
 
 
+def cmd_doctor(args) -> int:
+    """启用自检：逐项确认工具真的可用。"""
+    from .doctor import run_checks, verdict
+
+    cfg = load_config()
+    print("计算机赛事雷达 · 启用自检")
+    print("=" * 62)
+    checks = run_checks(cfg, send_test=args.test_notify)
+    marks = {"ok": "[OK]  ", "warn": "[注意]", "fail": "[失败]"}
+    for check in checks:
+        print(f"{marks.get(check.status, '[?]')} {check.name}：{check.detail}")
+    status, message = verdict(checks)
+    print("=" * 62)
+    print(("全部就绪：" if status == "ok" else "结论：") + message)
+    if status == "fail":
+        return 2
+    return 0
+
+
 def cmd_notify(args) -> int:
     """检查通知配置、预览待推送内容；--test 会真实发送一条测试消息。"""
     import copy
@@ -154,6 +173,43 @@ def cmd_notify(args) -> int:
 
     cfg = load_config()
     notify_cfg = cfg.settings.get("notify", {}) or {}
+
+    if args.redeliver:
+        from .notify import dispatch
+        from .store import Store
+
+        if not cfg.db_path.exists():
+            print("还没有数据库，先运行 python -m radar run")
+            return 1
+        store = Store(cfg.db_path)
+        rows = store.conn.execute(
+            "SELECT id FROM push_log ORDER BY id DESC LIMIT ?", (args.redeliver,)
+        ).fetchall()
+        if not rows:
+            print("没有可补发的提醒记录")
+            store.close()
+            return 0
+        ids = [int(r["id"]) for r in rows]
+        marks = ",".join("?" for _ in ids)
+        store.conn.execute(
+            f"UPDATE push_log SET status = 'pending' WHERE id IN ({marks})", ids
+        )
+        store.conn.commit()
+        pending = store.pending_pushes()
+        print(f"把最近 {len(ids)} 条提醒重新置为待推送，现在投递一次……")
+        result = dispatch(cfg, pending, log=print)
+        if result.ok and not result.dry_run:
+            store.mark_pushes([int(r["id"]) for r in pending], status="sent")
+        elif result.dry_run:
+            store.mark_pushes([int(r["id"]) for r in pending], status="dry-run",
+                              error=result.detail)
+        else:
+            store.mark_pushes([int(r["id"]) for r in pending], status="pending",
+                              error=result.detail)
+        print(f"结果：{'成功' if result.ok else '失败'} —— {result.detail}")
+        store.close()
+        return 0 if result.ok else 2
+
     print("== 当前通知配置 ==")
     print(f"  渠道: {notify_cfg.get('channel')}")
     print(f"  已启用: {notify_cfg.get('enabled')}   干跑模式: {notify_cfg.get('dry_run')}")
@@ -321,11 +377,18 @@ def main(argv: list[str] | None = None) -> int:
     p_nt = sub.add_parser("notify", help="检查通知配置并预览待推送内容")
     p_nt.add_argument("--test", action="store_true",
                       help="真实发送一条测试消息（会忽略 dry_run 与 enabled 开关）")
+    p_nt.add_argument("--redeliver", type=int, metavar="N", default=0,
+                      help="把最近 N 条提醒重新投递一次（换渠道后补发用）")
     p_nt.set_defaults(func=cmd_notify)
 
     p_dash = sub.add_parser("dashboard", help="重新生成网页仪表盘")
     p_dash.add_argument("--open", action="store_true", help="生成后用默认浏览器打开")
     p_dash.set_defaults(func=cmd_dashboard)
+
+    p_doc = sub.add_parser("doctor", help="启用自检：逐项确认依赖、目录、规则、数据库、推送、定时任务")
+    p_doc.add_argument("--test-notify", action="store_true",
+                       help="顺便真实发送一条通知（桌面通知渠道会弹一条）")
+    p_doc.set_defaults(func=cmd_doctor)
 
     args = ap.parse_args(argv)
     return args.func(args)

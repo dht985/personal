@@ -20,7 +20,7 @@ from typing import Callable
 
 from .config import Config
 
-CHANNELS = ("file", "wecom", "serverchan", "email")
+CHANNELS = ("file", "toast", "wecom", "serverchan", "email")
 WECOM_LIMIT = 3800  # 企业微信 markdown 内容上限约 4096 字节，留出余量
 
 
@@ -131,10 +131,22 @@ def _send_email(cfg: dict, title: str, body: str) -> tuple[bool, str]:
         return False, f"{type(exc).__name__}: {exc}"
 
 
+def _send_toast(cfg: dict, title: str, body: str) -> tuple[bool, str]:
+    """Windows 桌面通知：不需要任何账号，点通知可以打开仪表盘。"""
+    from .toast import send
+
+    lines = [line for line in (body or "").splitlines() if line.strip()]
+    summary = "\n".join(lines[:5])
+    if len(lines) > 5:
+        summary += f"\n…… 完整内容见 outbox 目录"
+    return send(title, summary, launch_path=cfg.get("launch_path") or None)
+
+
 SENDERS: dict[str, Callable[[dict, str, str], tuple[bool, str]]] = {
     "wecom": _send_wecom,
     "serverchan": _send_serverchan,
     "email": _send_email,
+    "toast": _send_toast,
 }
 
 
@@ -166,7 +178,15 @@ def dispatch(cfg: Config, rows, log: Callable[[str], None] = print) -> DeliveryR
         return DeliveryResult(True, channel, "干跑模式：内容已渲染但未发送",
                               dry_run=True, title=title, preview=body)
 
-    ok, detail = SENDERS[channel](notify_cfg.get(channel, {}) or {}, title, body)
+    sub_cfg = dict(notify_cfg.get(channel, {}) or {})
+    if channel == "toast" and not sub_cfg.get("launch_path"):
+        # 点通知直接打开仪表盘，比跳到纯文本文件更有用
+        for candidate in ("dashboard.html", f"notifications-{__import__('datetime').date.today().isoformat()}.md"):
+            path = cfg.outbox_dir / candidate
+            if path.exists():
+                sub_cfg["launch_path"] = str(path)
+                break
+    ok, detail = SENDERS[channel](sub_cfg, title, body)
     if ok:
         log(f"      已通过 {channel} 投递：{detail}")
     else:

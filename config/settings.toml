@@ -31,13 +31,18 @@ detail_limit = 70
 search_pages = 2
 
 [notify]
-# 渠道：file（只写文件）| wecom（企业微信机器人）| serverchan（Server酱）| email（SMTP）
-enabled = false
-channel = "file"
-# 先干跑：内容会渲染出来但不真正发送。确认无误后改成 false。
-dry_run = true
+# 渠道：toast（Windows 桌面通知，零配置）| file（只写文件）
+#       wecom（企业微信机器人）| serverchan（Server酱）| email（SMTP）
+enabled = true
+channel = "toast"
+# 干跑：内容只渲染不发送。toast 渠道已实测可用，故关闭干跑。
+dry_run = false
 # 单条提醒最多带几条赛事，超出部分只提示去看文件
 max_items = 10
+
+[notify.toast]
+# 点通知打开哪个页面；留空则自动指向 outbox/dashboard.html
+launch_path = ""
 
 [notify.wecom]
 # 企业微信机器人 Webhook 地址放在环境变量里，不写进配置文件
