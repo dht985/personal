@@ -211,7 +211,7 @@ class TestEvaluate(unittest.TestCase):
         rec = evaluate(self._record(catalog_category=None), self.cfg, self.meta)
         catalog_dim = next(d for d in rec["dimensions"] if d["key"] == "catalog")
         self.assertEqual(catalog_dim["status"], "negative")
-        self.assertTrue(any("认定目录" in r for r in rec["risks"]))
+        self.assertTrue(any("未收录" in r for r in rec["risks"]))
 
     def test_focus_requires_evidence(self):
         rec = evaluate(

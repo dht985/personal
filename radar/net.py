@@ -191,7 +191,8 @@ class Fetcher:
                     fetched_at=_now(),
                     content_type=ctype,
                 )
-                if self.save_raw:
+                # 只缓存成功响应：把重试耗尽的 5xx 缓存 6 小时会把瞬时故障固化
+                if self.save_raw and 200 <= resp.status_code < 300:
                     body, _ = self._cache_paths(url)
                     result.raw_path = body
                     self._write_cache(url, result, resp.content)

@@ -224,7 +224,7 @@ def _push_body(rec: dict) -> str:
 
 def _queue_pushes(
     store: Store, comp_id: int, rec: dict, prev, rec_changes: list[Change],
-    prev_notice_keys: set[str],
+    prev_notice_keys: set[str], catalog_title: str = "学校认定本科生学科竞赛目录",
 ) -> int:
     """只对"新赛事 / 需要行动 / 重要变化"排队推送，同一件事只推一次。"""
     created = 0
@@ -251,7 +251,7 @@ def _queue_pushes(
             rec["first_seen"][:10],
             f"新赛事待确认：{rec['name']}",
             _push_body(rec)
-            + "\n该赛事不在《云南大学认定本科生学科竞赛目录（2025版）》中，"
+            + f"\n该赛事不在《{catalog_title}》中，"
               "建议向学院或本科生院确认是否纳入认定范围。",
         )
 
@@ -265,7 +265,13 @@ def _queue_pushes(
                   f"报名截止日期变化：{rec['name']}", _push_body(rec))
 
     if prev is not None and prev["tier"] != "重点关注" and rec["tier"] == "重点关注":
-        queue("等级提升", rec["tier"], f"升级为重点关注：{rec['name']}", _push_body(rec))
+        # 带上日期，避免同一赛事一生只能推一次"升级"（降级后再升级也应提醒）
+        queue(
+            "等级提升",
+            f"{prev['tier']}->{rec['tier']}@{date.today().isoformat()}",
+            f"升级为重点关注：{rec['name']}",
+            _push_body(rec),
+        )
 
     new_keys = {canonical_url(n["url"]) for n in rec["notices"]} - prev_notice_keys
     if prev is not None and new_keys and rec["tier"] == "重点关注":
@@ -715,7 +721,8 @@ def run_pipeline(
             )
         if rec["visibility"] == "included":
             push_count += _queue_pushes(
-                store, comp_id, rec, prev, rec_changes, prev_notice_keys
+                store, comp_id, rec, prev, rec_changes, prev_notice_keys,
+                catalog_meta.get("title", "学校认定本科生学科竞赛目录"),
             )
         rec["last_verified"] = _now()
 
@@ -762,6 +769,7 @@ def run_pipeline(
     }
     stats["db"] = store.summary()
     stats["fetch_stats"] = fetcher.stats
+    stats["szcp_verified"] = szcp_rules.available
 
     candidates = {
         "generated_at": _now(),

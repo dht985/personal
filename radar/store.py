@@ -1,7 +1,7 @@
 """SQLite 持久化：赛事、通知、证据、评估、变化、推送记录。
 
 设计要点：
-- competitions 是赛事实体，key 跨批次稳定（catalog:<序号> 或 name:<规范化名>）。
+- competitions 是赛事实体，key 跨批次稳定（catalog:<赛事名> 或 name:<规范化名>）。
 - notices 是通知原文，按规范化 URL 唯一，保留首次发现与最近出现时间。
 - changes 记录每一处变化；push_log 记录已推送内容，用于"同一件事不重复提醒"。
 """

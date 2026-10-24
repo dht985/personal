@@ -208,8 +208,8 @@ def engine_alive(fetcher: Fetcher) -> bool:
 
 def _collect_search(
     fetcher: Fetcher, name: str, max_results: int = 10, max_resolve: int = 8
-) -> tuple[list[dict], bool, int]:
-    """跑定向检索并还原真实链接。返回 (结果, 检索是否正常完成, 跳过的条数)。
+) -> tuple[list[dict], bool, int, int]:
+    """跑定向检索并还原真实链接。返回 (结果, 检索是否正常完成, 跳过条数, 实际完成查询数)。
 
     360 的跳转链接必须先请求一次才能知道真实域名。为了不给外校结果白白发请求，
     先看标题/摘要里有没有"云大"线索，没有的直接跳过（会牺牲极少数标题不含校名的结果）。
@@ -218,6 +218,7 @@ def _collect_search(
     ok_any = False
     skipped = 0
     resolved = 0
+    queries_ok = 0
     for q in queries_for(name):
         try:
             results, _engine, ok = search_web(fetcher, q, pages=1, ttl_hours=24 * 30)
@@ -225,6 +226,7 @@ def _collect_search(
             results, ok = [], False
         if not ok:
             continue
+        queries_ok += 1
         if results:
             ok_any = True
         for item in results[:5]:
@@ -258,8 +260,8 @@ def _collect_search(
                 }
             )
             if len(hits) >= max_results:
-                return hits, ok_any, skipped
-    return hits, ok_any, skipped
+                return hits, ok_any, skipped, queries_ok
+    return hits, ok_any, skipped, queries_ok
 
 
 def assess(
@@ -328,10 +330,10 @@ def assess(
         queries_run = cached.get("queries_run", 0)
         search_ok = cached.get("search_ok", True)
     elif do_search:
-        hits, ok_any, skipped = _collect_search(fetcher, name)
+        hits, ok_any, skipped, queries_ok = _collect_search(fetcher, name)
         # 有结果说明引擎正常；没结果时用 canary 结果判定"确实没有"还是"检索挂了"
         search_ok = ok_any or engine_ok
-        queries_run = len(queries_for(name))
+        queries_run = queries_ok
         if skipped:
             notes.append(f"另有 {skipped} 条结果因标题/摘要无云大线索未展开（外校结果居多）")
         for hit in hits:

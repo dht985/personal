@@ -15,6 +15,10 @@ GENERIC_PARTS = [
     "赛事", "大赛", "竞赛", "比赛", "挑战赛", "专业人才", "作品",
 ]
 
+# 同一赛事体系下不同赛事的限定词。若目标里出现而目录条目里没有，
+# 说明是另一场比赛（如"美国大学生数学建模竞赛" vs 全国赛），不能当成同一条。
+CONFLICT_QUALIFIERS = ("美国", "亚太", "欧洲", "亚洲", "世界", "全球", "国际")
+
 
 def _distinctive_chunks(name: str) -> list[str]:
     """把赛事名里可区分、可检索的片段抽出来，用于"整个名字被包住"以外的匹配。"""
@@ -70,10 +74,18 @@ class Catalog:
         if not target:
             return None, 0.0, "empty"
 
+        def compatible(entry: CatalogEntry) -> bool:
+            entry_norm = normalize_name(entry.name)
+            return not any(
+                q in target and q not in entry_norm for q in CONFLICT_QUALIFIERS
+            )
+
         # 1) 直接包含（通知标题通常包含完整赛事名）
         best_contain: tuple[CatalogEntry | None, float] = (None, 0.0)
         for norm, entry in self._norm:
             if not norm:
+                continue
+            if not compatible(entry):
                 continue
             if norm in target or target in norm:
                 ratio = min(len(norm), len(target)) / max(len(norm), len(target))
@@ -85,7 +97,10 @@ class Catalog:
 
         # 2) 相似度
         norms = [n for n, _ in self._norm]
-        best = difflib.get_close_matches(target, norms, n=1, cutoff=threshold)
+        candidates = [
+            n for n, e in self._norm if compatible(e)
+        ]
+        best = difflib.get_close_matches(target, candidates, n=1, cutoff=threshold)
         if best:
             entry = next(e for n, e in self._norm if n == best[0])
             ratio = difflib.SequenceMatcher(None, target, best[0]).ratio()
@@ -94,7 +109,12 @@ class Catalog:
         # 3) 目录赛事名的可区分片段全部被目标串包含（应对届次、赛道、报名等后缀）
         best_chunk: tuple[CatalogEntry | None, float] = (None, 0.0)
         for chunks, entry in self._chunks:
+            if not compatible(entry):
+                continue
+            # 单个片段太短容易误伤（如"数学建模"），要求多片段或单片段足够长
             if not chunks or sum(len(c) for c in chunks) < 4:
+                continue
+            if len(chunks) == 1 and len(chunks[0]) < 6:
                 continue
             if all(c in target for c in chunks):
                 score = 0.75 + 0.2 * min(1.0, len("".join(chunks)) / max(len(normalize_name(entry.name)), 1))

@@ -73,10 +73,6 @@ q = "中国高校计算机大赛 2026"
 intent = "national_cs"
 
 [[discovery.query]]
-q = "大学生 程序设计 竞赛 2026 报名"
-intent = "discover_new"
-
-[[discovery.query]]
 q = "大学生 开源 开发者 大赛 2026 报名"
 intent = "discover_new"
 

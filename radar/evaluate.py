@@ -43,19 +43,48 @@ def _has(text: str, words: list[str]) -> bool:
     return any(w in text for w in words)
 
 
+_LEVEL_SIGNALS = (
+    ("国家级", NATIONAL_SIGNALS),
+    ("学会级", ACADEMIC_SIGNALS),
+    ("省级", PROVINCIAL_SIGNALS),
+    ("企业级", ENTERPRISE_SIGNALS),
+)
+
+
+def _level_of(segment: str) -> str:
+    for level, signals in _LEVEL_SIGNALS:
+        if any(s in segment for s in signals):
+            return level
+    return "未知"
+
+
 def classify_organizer(text: str) -> tuple[str, str]:
-    """依据原文判断主办方层级。返回 (层级, 依据片段)。"""
-    for level, signals in (
-        ("国家级", NATIONAL_SIGNALS),
-        ("学会级", ACADEMIC_SIGNALS),
-        ("省级", PROVINCIAL_SIGNALS),
-        ("企业级", ENTERPRISE_SIGNALS),
-    ):
-        for s in signals:
-            idx = text.find(s)
-            if idx >= 0:
-                seg = text[max(0, idx - 25): idx + 35].strip()
-                return level, seg
+    """依据原文判断主办方层级。返回 (层级, 依据片段)。
+
+    关键是先锚定"主办单位/主办方"这类表述，只在锚点附近取词。
+    否则省级选拔通知里一句"参加全国总决赛"就会把整场赛事误判成国家级。
+    """
+    # 1) "主办单位：X" / "主办方：X"
+    for m in re.finditer(r"(?:主办单位|主办方)[^。；;\n]{0,4}?[:：]\s*([^。；;\n]{2,60})", text):
+        seg = m.group(1).strip()
+        level = _level_of(seg)
+        if level != "未知":
+            return level, seg
+
+    # 2) "X主办，..." 这种主语在前的写法
+    for m in re.finditer(r"([^。；;\n，,]{2,40}?)(?:联合)?主办", text):
+        seg = m.group(1).strip()
+        level = _level_of(seg)
+        if level != "未知":
+            return level, seg
+
+    # 3) 没有明确主办表述时，逐句看，跳过"参加/选拔/晋级"这类参赛语境
+    for sentence in re.split(r"[。；;\n]", text):
+        if re.search(r"参加|参赛|选拔|晋级|进入|入围", sentence):
+            continue
+        level = _level_of(sentence)
+        if level != "未知":
+            return level, sentence.strip()[:80]
     return "未知", ""
 
 
@@ -246,7 +275,7 @@ def evaluate(
             label="云南大学认定目录",
             score=sc["catalog_score"]["未收录"],
             status="negative",
-            detail="未匹配到《云南大学认定本科生学科竞赛目录（2025版）》中的条目。"
+            detail=f"未匹配到《{catalog_meta.get('title', '云南大学认定本科生学科竞赛目录')}》中的条目。"
                    "可能是新赛事、名称差异过大，或本就不在校内认定范围内，需要人工复核。",
             evidence=[{"type": "catalog", "source": catalog_meta.get("source_url", "")}],
         )
@@ -329,7 +358,10 @@ def evaluate(
     if fee and not re.search(r"免费|不收取|无报名费", fee):
         risks.append(f"可能涉及费用：{fee}")
     if record.get("catalog_category") is None:
-        risks.append("未收录于 2025 版认定目录，参赛前建议先向学院/本科生院确认是否计入认定")
+        risks.append(
+            f"未收录于《{catalog_meta.get('title', '学校认定本科生学科竞赛目录')}》，"
+            "参赛前建议先向学院/本科生院确认是否计入认定"
+        )
     if not record.get("student_reviews"):
         risks.append("未找到足够可靠的公开学生评价")
     actions.append("核对官方通知原文中的报名入口与截止时间")

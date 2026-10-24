@@ -15,6 +15,7 @@ import ssl
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
+from datetime import date
 from email.message import EmailMessage
 from typing import Callable
 
@@ -181,7 +182,7 @@ def dispatch(cfg: Config, rows, log: Callable[[str], None] = print) -> DeliveryR
     sub_cfg = dict(notify_cfg.get(channel, {}) or {})
     if channel == "toast" and not sub_cfg.get("launch_path"):
         # 点通知直接打开仪表盘，比跳到纯文本文件更有用
-        for candidate in ("dashboard.html", f"notifications-{__import__('datetime').date.today().isoformat()}.md"):
+        for candidate in ("dashboard.html", f"notifications-{date.today().isoformat()}.md"):
             path = cfg.outbox_dir / candidate
             if path.exists():
                 sub_cfg["launch_path"] = str(path)

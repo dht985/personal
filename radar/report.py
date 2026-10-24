@@ -78,7 +78,8 @@ def render_card(record: dict, catalog_meta: dict) -> str:
         )
         add(f"  - 目录来源：{catalog_meta.get('source_url', '')}")
     else:
-        add(f"- 云南大学认定目录：**未收录于 2025 版目录**（需人工确认是否属于认定范围）")
+        add(f"- 云南大学认定目录：**未收录于《{catalog_meta.get('title', '学校认定目录')}》**"
+            f"（需人工确认是否属于认定范围）")
     add(f"- 与计算机专业适配度：{record.get('cs_fit')}")
     add(f"- 有效期状态：{record.get('deadline_detail')}")
     profile = record.get("ynu_profile") or {}
@@ -329,7 +330,11 @@ def render_digest(
     add("## 核查说明与局限")
     add("")
     add("- 目录认定、综合测评赋分、保研价值是三个不同概念，本报告分维度呈现，不互相替代。")
-    add("- 综测赋分维度当前为「未核实」：尚未取得云南大学现行有效的本科生综合素质测评办法原文。")
+    if stats.get("szcp_verified"):
+        add("- 综测赋分已按计科细则逐赛事计算（基础分 × 分类权重 × 获奖权重 × 排名权重，上限 5 分），"
+            "数值是「国家级一等奖 + 团队排名第一」的上限情形。")
+    else:
+        add("- 综测赋分维度当前为「未核实」：尚未取得计分规则原文。")
     add("- 所有日期均来自通知原文抽取，附原文片段；抽取失败时明确标注，未做推测。")
     add("- 学生评价维度只在有可靠公开来源时才呈现，否则写「未找到足够可靠的公开评价」。")
     add(f"- 原始网页快照保存在 data/raw/ 下，可按 URL 哈希复核。")

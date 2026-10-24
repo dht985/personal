@@ -1,5 +1,5 @@
 # Register a weekly Windows scheduled task for the competition radar.
-# Run this in an elevated (Administrator) PowerShell window.
+# This registers a per-user task and does NOT require an elevated shell.
 #
 # NOTE: ASCII-only on purpose - Windows PowerShell 5.1 reads .ps1 as ANSI/GBK
 # unless the file has a UTF-8 BOM, which would break non-ASCII text here.
