@@ -67,6 +67,16 @@ def main() -> int:
         hits = page.eval_on_selector_all(".card", "els => els.length")
         print(f"搜索「软件测试」命中卡片数: {hits}")
 
+        # 新标签与筛选
+        page.fill("#q", "")
+        page.select_option("#fynu", label="充足")
+        page.wait_for_timeout(300)
+        print(f"筛选「云大支撑=充足」后卡片数: {page.eval_on_selector_all('.card','e=>e.length')}")
+        page.select_option("#fmentor", label="可自主")
+        page.wait_for_timeout(300)
+        print(f"再叠加「完成方式=可自主」: {page.eval_on_selector_all('.card','e=>e.length')}")
+        page.screenshot(path=str(SHOTS / "tags.png"))
+
         browser.close()
 
     print(f"截图目录: {SHOTS}")

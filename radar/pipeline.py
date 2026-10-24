@@ -15,10 +15,15 @@ from .extract import extract_fields, guess_competition_name, summarize_dates
 from .net import Fetcher
 from .notify import dispatch
 from .report import best_notice, render_card, render_digest, render_notifications
+from .requirement import assess_requirement
 from .sources import Notice, collect_discovery, collect_official, enrich_details
 from .store import Change, Store, TRACKED_FIELDS
 from .szcp import SzcpRules
 from .textutil import canonical_url, normalize_name, squeeze
+from .ynu_profile import assess as assess_ynu
+from .ynu_profile import build_corpus
+from .ynu_profile import engine_alive
+from .ynu_profile import PROFILE_VERSION
 
 
 def _now() -> str:
@@ -71,6 +76,34 @@ def _keep_discovery(item: dict, cfg: Config) -> bool:
     cs_like = any(w in title for w in cfg.keywords["cs_signals"])
     edu_like = ".edu.cn" in url or ".gov.cn" in url or "cahe.edu.cn" in url
     return bool(cs_like or edu_like)
+
+
+OTHER_SCHOOL_INTERNAL_RE = re.compile(r"校级|校赛|校内赛")
+EXAM_NOISE_RE = re.compile(r"等级考试|考点|考试报名|四六级|普通话")
+AWARD_NEWS_RE = re.compile(r"斩获|荣获|夺冠|获佳绩|冠军|获奖")
+PORTAL_RE = re.compile(r"官网$|报名入口|本地宝|赛氪|竞赛网|题库|攻略|专题|门户")
+NOTICE_HINT_RE = re.compile(r"通知|报名|启动|开赛|征集|选拔|赛道|赛项")
+
+
+def _is_discoverable_competition(title: str, url: str) -> bool:
+    """发现通道里只保留"赛事"，并剔除外校校赛、等级考试这类噪声。"""
+    if EXAM_NOISE_RE.search(title or ""):
+        return False
+    if OTHER_SCHOOL_INTERNAL_RE.search(title or "") and not re.search(r"云南大学|云大", title or ""):
+        return False
+    # 外校的获奖新闻不是"发现新赛事"，只是别人拿了奖
+    if AWARD_NEWS_RE.search(title or "") and not re.search(r"通知|报名|启动|开赛", title or ""):
+        return False
+    # 竞赛导航站/官网首页没有可行动的信息
+    if PORTAL_RE.search(title or ""):
+        return False
+    # 搜索引擎自己的结果页不能当赛事页
+    if re.search(r"(^|\.)(so\.com|sogou\.com)", url or ""):
+        return False
+    # 既不像通知、又不在教育/政府域名上的，多半是平台首页或第三方文章
+    if not NOTICE_HINT_RE.search(title or "") and not re.search(r"\.(edu|gov)\.cn", url or ""):
+        return False
+    return True
 
 
 def _first_nonempty(values: list[str]) -> str | None:
@@ -446,6 +479,19 @@ def run_pipeline(
             h["catalog_category"] = entry.category if entry else None
             h["catalog_no"] = entry.no if entry else None
             discovery.append(h)
+            real_url = h.get("real_url") or h["url"]
+            if not _is_discoverable_competition(h["title"], real_url):
+                h["kept"] = False
+                continue
+            # 云大自己的页面已经在官方栏目里采过了；这里只收计算机相关或已进目录的，
+            # 避免体育学院/经济学院这类与专业无关的通知混进来。
+            if (
+                entry is None
+                and "ynu.edu.cn" in (real_url or "")
+                and not any(w in h["title"] for w in cfg.keywords["cs_signals"])
+            ):
+                h["kept"] = False
+                continue
             if entry:
                 key = _entry_key(entry)
                 rec = records.get(key)
@@ -466,20 +512,41 @@ def run_pipeline(
                         "registration_evidence": [],
                     }
                     rec = records[key]
-                _append_notice(
-                    rec,
-                    {
-                        "title": h["title"],
-                        "url": h.get("real_url") or h["url"],
-                        "source_id": "search360",
-                        "source_name": "360搜索发现",
-                        "authority": "aggregator",
-                        "published_at": None,
-                        "list_date": None,
-                        "fetched_at": _now(),
-                        "body_excerpt": h.get("snippet", ""),
+            else:
+                # 没进目录的赛事也先建记录，由云大生态评估决定是否值得纳入
+                key = "name:" + (normalize_name(guessed) or normalize_name(h["title"]))
+                rec = records.get(key)
+                if rec is None:
+                    records[key] = {
+                        "key": key,
+                        "name": guessed or h["title"],
+                        "catalog_no": None,
+                        "catalog_category": None,
+                        "catalog_dept": None,
+                        "catalog_category_prev": None,
+                        "catalog_match_method": "miss",
+                        "catalog_match_score": 0.0,
+                        "notices": [],
+                        "sources": ["搜索引擎发现"],
+                        "official_links": [],
+                        "student_reviews": [],
+                        "registration_evidence": [],
                     }
-                )
+                    rec = records[key]
+            _append_notice(
+                rec,
+                {
+                    "title": h["title"],
+                    "url": real_url,
+                    "source_id": "search360",
+                    "source_name": "360搜索发现",
+                    "authority": "aggregator",
+                    "published_at": None,
+                    "list_date": None,
+                    "fetched_at": _now(),
+                    "body_excerpt": h.get("snippet", ""),
+                }
+            )
         stats["discovery_kept"] = sum(1 for d in discovery if d.get("kept"))
     else:
         stats["discovery_hits"] = 0
@@ -493,6 +560,21 @@ def run_pipeline(
     if szcp_rules.available:
         log(f"      综测规则已加载：{szcp_rules.meta.get('title', '')}"
             f"（上限 {szcp_rules.rules.get('cap')} 分）")
+
+    rep_cfg = cfg.settings.get("reputation", {}) or {}
+    corpus = None
+    engine_ok = True
+    if rep_cfg.get("enabled", True):
+        corpus = build_corpus(fetcher)
+        engine_ok = engine_alive(fetcher)
+        log(f"      校内证据库：{corpus.pages_ok} 个栏目页面已载入；"
+            f"检索引擎{'可用' if engine_ok else '不可用'}")
+    entries_by_no: dict[int, object] = {}
+    for entry in list(catalog.entries) + list(catalog_prev.entries):
+        entries_by_no.setdefault(entry.no, entry)
+    profile_budget = int(rep_cfg.get("max_competitions", 40))
+    profiles_done = 0
+
     changes: list[dict] = []
     new_count = 0
     push_count = 0
@@ -520,11 +602,71 @@ def run_pipeline(
         known_years = {y for y in known_years if len(y) == 4}
         rec["history_years"] = sorted(known_years)
 
-        evaluate(
-            rec, cfg, catalog_meta, history_years=len(known_years),
-            szcp=szcp, szcp_rules=szcp_rules,
+        # ---- 云大生态评估：知名度 / 导师资源 / 获奖先例 ----
+        cached_profile = None
+        if prev is not None and prev["profile_checked_at"] and prev["ynu_evidence"]:
+            try:
+                age = datetime.now().astimezone() - datetime.fromisoformat(prev["profile_checked_at"])
+                if age.days < int(rep_cfg.get("refresh_days", 30)):
+                    cached_profile = json.loads(prev["ynu_evidence"])
+                if cached_profile and cached_profile.get("version") != PROFILE_VERSION:
+                    cached_profile = None  # 评估逻辑升级过，旧结论作废
+            except (ValueError, json.JSONDecodeError):
+                cached_profile = None
+
+        if cached_profile:
+            rec["ynu_profile"] = cached_profile
+            rec["profile_checked_at"] = prev["profile_checked_at"]
+        elif corpus is not None and profiles_done < profile_budget:
+            entry = entries_by_no.get(rec.get("catalog_no")) if rec.get("catalog_no") else None
+            profile = assess_ynu(rec, corpus, fetcher, entry, engine_ok=engine_ok)
+            rec["ynu_profile"] = profile.as_dict()
+            rec["profile_checked_at"] = _now()
+            profiles_done += 1
+        else:
+            rec["ynu_profile"] = {
+                "verdict": "unassessed",
+                "in_catalog": bool(rec.get("catalog_category")),
+                "queries_run": 0,
+                "search_ok": False,
+                "notes": ["本轮评估预算用尽，尚未检索；下一轮优先补查"],
+                "dimensions": [],
+            }
+            rec["profile_checked_at"] = None
+
+        rec["ynu_verdict"] = rec["ynu_profile"]["verdict"]
+        rec["visibility"] = (
+            "excluded" if rec["ynu_verdict"] == "insufficient"
+            else "unassessed" if rec["ynu_verdict"] == "unassessed"
+            else "included"
         )
-        rec["tier_reason"] = explain_tier(rec)
+        req = assess_requirement(rec)
+        rec["requirement"] = req
+        rec["mentor_dependency"] = req["mentor_dependency"]
+        rec["difficulty"] = req["difficulty"]
+
+        if rec["visibility"] == "excluded":
+            rec["tier"] = "已排除"
+            rec["tier_reason"] = "云大生态评估判定为不足：三个维度均无校内线索且不在认定目录中，暂不纳入"
+            rec["score_total"] = None
+            rec["verified_dimensions"] = 0
+            rec["dimensions"] = []
+            rec["risks"] = ["云大缺乏知名度、导师资源与获奖先例"]
+            rec["next_actions"] = ["若确认校内有人组织或指导，可重新评估纳入"]
+        elif rec["visibility"] == "unassessed":
+            rec["tier"] = "待评估"
+            rec["tier_reason"] = "尚未完成云大生态检索，本轮不展示，下一轮优先补查"
+            rec["score_total"] = None
+            rec["verified_dimensions"] = 0
+            rec["dimensions"] = []
+            rec["risks"] = []
+            rec["next_actions"] = []
+        else:
+            evaluate(
+                rec, cfg, catalog_meta, history_years=len(known_years),
+                szcp=szcp, szcp_rules=szcp_rules,
+            )
+            rec["tier_reason"] = explain_tier(rec)
 
         rec_changes = _detect_changes(prev, rec)
         rec["last_changed"] = (
@@ -565,20 +707,26 @@ def run_pipeline(
                     "detail": ch.detail,
                 }
             )
-        push_count += _queue_pushes(
-            store, comp_id, rec, prev, rec_changes, prev_notice_keys
-        )
+        if rec["visibility"] == "included":
+            push_count += _queue_pushes(
+                store, comp_id, rec, prev, rec_changes, prev_notice_keys
+            )
         rec["last_verified"] = _now()
 
     stats["new_records"] = new_count
-    stats["records"] = len(records)
+    included = [r for r in records.values() if r.get("visibility") == "included"]
+    excluded = [r for r in records.values() if r.get("visibility") == "excluded"]
+    unassessed = [r for r in records.values() if r.get("visibility") == "unassessed"]
+    stats["records"] = len(included)
+    stats["excluded"] = len(excluded)
+    stats["unassessed"] = len(unassessed)
     stats["changes"] = len(changes)
     stats["pushes"] = push_count
 
     log("[6/6] 输出报告")
     stamp = date.today().isoformat()
     ordered = sorted(
-        records.values(),
+        included,
         key=lambda r: (
             ["重点关注", "潜在机会", "低优先级/证据不足"].index(r["tier"]),
             -(r.get("score_total") or 0),
@@ -616,6 +764,8 @@ def run_pipeline(
         "fetch_log": log_rows,
         "changes": changes,
         "records": [_serializable(r) for r in ordered],
+        "excluded": [_serializable(r) for r in excluded],
+        "unassessed": [_serializable(r) for r in unassessed],
         "discovery": discovery,
     }
     cfg.candidates_path.parent.mkdir(parents=True, exist_ok=True)

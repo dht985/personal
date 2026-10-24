@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .config import Config
-from .report import TIER_ORDER, best_notice
+from .report import MENTOR_LABEL, TIER_ORDER, VERDICT_LABEL, best_notice
 
 TEMPLATE_PATH = Path(__file__).with_name("dashboard_template.html")
 DATA_PLACEHOLDER = "/*__DATA__*/"
@@ -59,6 +59,14 @@ def build_payload(
                 "registration_last": r.get("registration_last"),
                 "tier_reason": r.get("tier_reason", ""),
                 "szcp_estimate": r.get("szcp_estimate"),
+                "ynu_verdict": (r.get("ynu_profile") or {}).get("verdict"),
+                "ynu_label": VERDICT_LABEL.get(
+                    (r.get("ynu_profile") or {}).get("verdict"), "未评估"),
+                "mentor_dependency": r.get("mentor_dependency"),
+                "mentor_label": MENTOR_LABEL.get(r.get("mentor_dependency"), "未判定"),
+                "difficulty": r.get("difficulty"),
+                "ynu_profile": r.get("ynu_profile") or {},
+                "requirement": r.get("requirement") or {},
                 "risks": r.get("risks", []),
                 "next_actions": r.get("next_actions", []),
                 "dimensions": r.get("dimensions", []),
@@ -104,6 +112,7 @@ def build_payload(
             ("发现通道命中", stats.get("discovery_kept", 0)),
             ("本轮变化", len(changes)),
             ("本轮提醒", stats.get("notifications", 0)),
+            ("云大支撑不足已排除", stats.get("excluded", 0)),
         ],
         "records": out_records,
         "changes": [

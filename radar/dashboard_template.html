@@ -42,6 +42,8 @@
   .badge.t-focus{background:#fdecea;border-color:#f5c6c2;color:var(--focus)}
   .badge.t-potential{background:#eaf1fd;border-color:#c3d7f8;color:var(--potential)}
   .badge.t-low{background:#f3f4f6;border-color:#e5e7eb;color:var(--low)}
+  .badge.t-ok{background:#e8f5ee;border-color:#bfe3cd;color:#1f7a4d}
+  .badge.t-warn{background:#fff4e5;border-color:#f3d19b;color:#9a5b00}
   .bar{height:7px;border-radius:4px;background:#eef1f5;overflow:hidden;display:flex}
   .bar i{display:block;height:100%}
   .kv{display:grid;grid-template-columns:72px 1fr;gap:2px 8px;font-size:12.5px}
@@ -93,6 +95,8 @@
     <select id="fcat"><option value="">全部目录类别</option></select>
     <select id="ffit"><option value="">全部适配度</option></select>
     <select id="fdl"><option value="">全部截止状态</option></select>
+    <select id="fynu"><option value="">全部云大支撑</option></select>
+    <select id="fmentor"><option value="">全部完成方式</option></select>
     <select id="sort">
       <option value="score">按总分排序</option>
       <option value="deadline">按报名截止排序</option>
@@ -167,7 +171,8 @@ function fill(id, key){
     vals.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join(""));
 }
 fill("fcat","catalog_category"); fill("ffit","cs_fit"); fill("fdl","deadline_status");
-["q","fcat","ffit","fdl","sort"].forEach(id => document.getElementById(id).oninput = render);
+fill("fynu","ynu_label"); fill("fmentor","mentor_label");
+["q","fcat","ffit","fdl","fynu","fmentor","sort"].forEach(id => document.getElementById(id).oninput = render);
 
 function bar(r){
   const total = r.dimensions.reduce((s,d)=>s+Math.max(0,d.score),0) || 1;
@@ -190,6 +195,10 @@ function card(r){
       <span class="badge">适配 ${esc(r.cs_fit)}</span>
       <span class="badge">${esc(r.deadline_status)}</span>
       ${r.szcp_estimate ? `<span class="badge" title="${esc(r.szcp_estimate.formula)}">综测加分 ${esc(r.szcp_estimate.capped)}/${esc(r.szcp_estimate.cap)}</span>` : ""}
+      <span class="badge ${r.ynu_verdict === 'sufficient' ? 't-ok' : (r.ynu_verdict === 'inconclusive' ? 't-warn' : '')}"
+            title="云大知名度 / 导师资源 / 获奖先例">云大 ${esc(r.ynu_label)}</span>
+      <span class="badge ${r.mentor_dependency === 'required' ? 't-warn' : (r.mentor_dependency === 'self' ? 't-ok' : '')}"
+            title="赛事难度 ${esc(r.difficulty || '未判定')}">${esc(r.mentor_label)}</span>
     </div>
     ${bar(r)}
     <dl class="kv">
@@ -207,6 +216,8 @@ function render(){
   const fc = document.getElementById("fcat").value;
   const ff = document.getElementById("ffit").value;
   const fd = document.getElementById("fdl").value;
+  const fy = document.getElementById("fynu").value;
+  const fm = document.getElementById("fmentor").value;
   const sort = document.getElementById("sort").value;
 
   let rows = DATA.records.filter(r =>
@@ -214,6 +225,8 @@ function render(){
     (!fc || r.catalog_category === fc) &&
     (!ff || r.cs_fit === ff) &&
     (!fd || r.deadline_status === fd) &&
+    (!fy || r.ynu_label === fy) &&
+    (!fm || r.mentor_label === fm) &&
     (!q || (r.name + " " + r.search_text).toLowerCase().includes(q)));
 
   rows.sort((a,b) =>
@@ -251,6 +264,27 @@ function openDetail(key){
     : `<div class="empty">未检索到该校赛的获奖新闻</div>`;
   document.getElementById("m-body").innerHTML = `
     <h3>报名时间与原文依据</h3>${evs}
+    <h3 style="margin-top:18px">云大生态评估</h3>
+    ${r.ynu_profile && r.ynu_profile.dimensions && r.ynu_profile.dimensions.length
+      ? `<div class="muted">结论：<b>${esc(r.ynu_label)}</b>　
+           ${(r.ynu_profile.notes||[]).map(n=>esc(n)).join("；")}</div>
+         ${r.ynu_profile.dimensions.map(d => `
+           <div class="dim">
+             <div class="lbl">${esc(d.label)}</div>
+             <div><span class="pill">${d.status === 'found' ? '有据' : '未找到'}</span></div>
+             <div>${(d.evidence||[]).map(e => `
+               <div>${e.url ? `<a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.title || e.url)}</a>` : esc(e.title)}
+               ${e.snippet ? `<div class="ev">${esc(e.snippet)}</div>` : ""}</div>`).join("") || '<span class="muted">没有找到相关校内材料</span>'}
+             </div>
+           </div>`).join("")}`
+      : `<div class="empty">本轮未做云大生态检索</div>`}
+    <h3 style="margin-top:18px">需要导师还是可以自主完成</h3>
+    ${r.requirement && r.requirement.reasons
+      ? `<div class="ev"><b>结论：${esc(r.mentor_label)}</b>　赛事难度：${esc(r.difficulty || '未判定')}
+         <br>${(r.requirement.reasons||[]).map(x=>'· '+esc(x)).join('<br>')}
+         ${(r.requirement.evidence||[]).map(e => `<div class="ev" style="margin-top:6px">原文（${esc(e.field||'')}）：「${esc(e.snippet||'')}」</div>`).join("")}
+         </div>`
+      : `<div class="empty">暂无法判定</div>`}
     <h3 style="margin-top:18px">分维度判断（互不替代）</h3>${dims}
     ${r.szcp_estimate ? `<h3 style="margin-top:18px">综测加分估算</h3>
       <div class="ev">按「${esc(r.szcp_estimate.level)}${esc(r.szcp_estimate.award)} + 团队排名${esc(r.szcp_estimate.rank)}」计算：

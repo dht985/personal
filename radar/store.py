@@ -47,7 +47,14 @@ CREATE TABLE IF NOT EXISTS competitions (
     authority          TEXT,
     first_seen         TEXT NOT NULL,
     last_verified      TEXT NOT NULL,
-    last_changed       TEXT
+    last_changed       TEXT,
+    ynu_verdict        TEXT,
+    ynu_evidence       TEXT,
+    mentor_dependency  TEXT,
+    difficulty         TEXT,
+    requirement_evidence TEXT,
+    visibility         TEXT DEFAULT 'included',
+    profile_checked_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS notices (
@@ -167,6 +174,21 @@ class Store:
             if column not in existing:
                 self.conn.execute(ddl)
 
+        comp_cols = {
+            row["name"] for row in self.conn.execute("PRAGMA table_info(competitions)")
+        }
+        for column, ddl in (
+            ("ynu_verdict", "ALTER TABLE competitions ADD COLUMN ynu_verdict TEXT"),
+            ("ynu_evidence", "ALTER TABLE competitions ADD COLUMN ynu_evidence TEXT"),
+            ("mentor_dependency", "ALTER TABLE competitions ADD COLUMN mentor_dependency TEXT"),
+            ("difficulty", "ALTER TABLE competitions ADD COLUMN difficulty TEXT"),
+            ("requirement_evidence", "ALTER TABLE competitions ADD COLUMN requirement_evidence TEXT"),
+            ("visibility", "ALTER TABLE competitions ADD COLUMN visibility TEXT DEFAULT 'included'"),
+            ("profile_checked_at", "ALTER TABLE competitions ADD COLUMN profile_checked_at TEXT"),
+        ):
+            if column not in comp_cols:
+                self.conn.execute(ddl)
+
     # ---- run lifecycle ------------------------------------------------
     def start_run(self) -> int:
         cur = self.conn.execute("INSERT INTO runs (started_at) VALUES (?)", (_now(),))
@@ -236,6 +258,15 @@ class Store:
             "first_seen": first_seen,
             "last_verified": last_verified,
             "last_changed": rec.get("last_changed"),
+            "ynu_verdict": rec.get("ynu_verdict"),
+            "ynu_evidence": json.dumps(rec.get("ynu_profile") or {}, ensure_ascii=False)
+            if rec.get("ynu_profile") else None,
+            "mentor_dependency": rec.get("mentor_dependency"),
+            "difficulty": rec.get("difficulty"),
+            "requirement_evidence": json.dumps(rec.get("requirement") or {}, ensure_ascii=False)
+            if rec.get("requirement") else None,
+            "visibility": rec.get("visibility", "included"),
+            "profile_checked_at": rec.get("profile_checked_at"),
         }
         if row is None:
             cols = ", ".join(values)

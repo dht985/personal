@@ -14,6 +14,7 @@ from .parse import parse_detail_page, parse_list_page
 from .textutil import canonical_url, clean_text
 
 SEARCH_ENDPOINT = "https://www.so.com/s"
+SOGOU_ENDPOINT = "https://www.sogou.com/web"
 
 
 @dataclass
@@ -201,6 +202,52 @@ def search_360(fetcher: Fetcher, query: str, pages: int = 1) -> list[dict]:
                 }
             )
     return out
+
+
+def search_sogou(fetcher: Fetcher, query: str, pages: int = 1) -> list[dict]:
+    """搜狗网页搜索。360 被限流时作为主引擎使用。"""
+    out: list[dict] = []
+    for page in range(1, pages + 1):
+        params = {"query": query}
+        if page > 1:
+            params["page"] = str(page)
+        url = SOGOU_ENDPOINT + "?" + urllib.parse.urlencode(params)
+        res = fetcher.fetch(url, check_robots=False)
+        if not res.ok or not res.text:
+            break
+        doc = lxml_html.fromstring(res.text)
+        blocks = doc.xpath("//div[contains(@class,'vrwrap')]")
+        if not blocks:
+            break
+        for block in blocks:
+            anchors = block.xpath(".//h3/a")
+            if not anchors:
+                continue
+            href = anchors[0].get("href") or ""
+            title = clean_text(anchors[0].text_content() or "")
+            if not title:
+                continue
+            full = urllib.parse.urljoin("https://www.sogou.com/", href)
+            text = clean_text(block.text_content() or "")
+            snippet = text[len(title):][:220] if text.startswith(title) else text[:220]
+            out.append(
+                {
+                    "title": title,
+                    "url": full,
+                    "snippet": snippet,
+                    "engine": "sogou",
+                    "query": query,
+                }
+            )
+    return out
+
+
+def resolve_sogou(fetcher: Fetcher, url: str) -> str:
+    """搜狗结果通常是 /link?url=... 跳转，取最终地址。"""
+    if "sogou.com/link" not in url:
+        return url
+    res = fetcher.fetch(url, check_robots=False)
+    return res.final_url if res.ok else url
 
 
 def collect_discovery(cfg: Config, fetcher: Fetcher, resolve: bool = True) -> list[dict]:

@@ -11,6 +11,18 @@ NOT_FOUND = "未找到可靠来源（需人工补充）"
 
 TIER_ORDER = ["重点关注", "潜在机会", "低优先级/证据不足"]
 
+VERDICT_LABEL = {"sufficient": "充足", "inconclusive": "证据不充分", "insufficient": "不足"}
+MENTOR_LABEL = {"required": "需导师", "self": "可自主", "pending": "待确认"}
+DIM_LABEL = {"awareness": "知名度", "mentor": "导师资源", "awards": "获奖先例"}
+
+
+def profile_tags(record: dict) -> str:
+    """给表格/卡片用的紧凑标签，例如「充足·可自主」。"""
+    profile = record.get("ynu_profile") or {}
+    verdict = VERDICT_LABEL.get(profile.get("verdict"), "未评估")
+    mentor = MENTOR_LABEL.get(record.get("mentor_dependency"), "未判定")
+    return f"{verdict}·{mentor}"
+
 
 def best_notice(record: dict) -> dict | None:
     """引用哪条通知：优先校内官方，其次官方，最后才是搜索发现。"""
@@ -69,6 +81,16 @@ def render_card(record: dict, catalog_meta: dict) -> str:
         add(f"- 云南大学认定目录：**未收录于 2025 版目录**（需人工确认是否属于认定范围）")
     add(f"- 与计算机专业适配度：{record.get('cs_fit')}")
     add(f"- 有效期状态：{record.get('deadline_detail')}")
+    profile = record.get("ynu_profile") or {}
+    if profile:
+        dims = {d["key"]: d for d in profile.get("dimensions", [])}
+        found = "".join(
+            ("✓" if dims.get(k, {}).get("status") == "found" else "✗") + DIM_LABEL[k] + " "
+            for k in ("awareness", "mentor", "awards")
+        )
+        add(f"- 云大支撑：**{VERDICT_LABEL.get(profile.get('verdict'), '未评估')}**（{found.strip()}）")
+        add(f"- 完成方式：**{MENTOR_LABEL.get(record.get('mentor_dependency'), '未判定')}**"
+            f"（赛事难度：{record.get('difficulty', '未判定')}）")
     est = record.get("szcp_estimate")
     if est:
         add(
@@ -125,6 +147,30 @@ def render_card(record: dict, catalog_meta: dict) -> str:
                 add(f"  - 来源：{ev['url']}")
     add("")
 
+    if profile:
+        add("## 五之二、云大生态评估")
+        for dim in profile.get("dimensions", []):
+            mark = "有据" if dim.get("status") == "found" else "未找到"
+            add(f"- **{dim['label']}**（{mark}）")
+            for ev in dim.get("evidence", [])[:3]:
+                line = f"  - {ev.get('title', '')}"
+                if ev.get("url"):
+                    line += f" {ev['url']}"
+                add(line)
+                if ev.get("snippet"):
+                    add(f"    - 摘录：{_cell(ev['snippet'], 100)}")
+        for note in profile.get("notes", []):
+            add(f"- 判定说明：{note}")
+        add("")
+        add("## 五之三、完成方式判断")
+        add(f"- 结论：**{MENTOR_LABEL.get(record.get('mentor_dependency'), '未判定')}**，"
+            f"难度 **{record.get('difficulty', '未判定')}**")
+        for reason in (record.get("requirement") or {}).get("reasons", []):
+            add(f"  - {reason}")
+        for ev in (record.get("requirement") or {}).get("evidence", [])[:3]:
+            add(f"  - 原文（{ev.get('field', '')}）：「{_cell(ev.get('snippet', ''), 100)}」")
+        add("")
+
     add("## 六、推荐理由 / 风险 / 下一步")
     add(f"- 推荐关注理由：{record.get('tier_reason', '')}")
     if record.get("risks"):
@@ -149,18 +195,19 @@ def render_card(record: dict, catalog_meta: dict) -> str:
 
 def _summary_table(records: list[dict]) -> list[str]:
     lines = [
-        "| 赛事 | 目录类别 | 适配度 | 报名截止 | 状态 | 总分 |",
-        "| --- | --- | --- | --- | --- | --- |",
+        "| 赛事 | 目录类别 | 适配度 | 报名截止 | 状态 | 总分 | 云大·完成方式 |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
     ]
     for r in records:
         lines.append(
-            "| {name} | {cat} | {fit} | {dl} | {st} | {score} |".format(
+            "| {name} | {cat} | {fit} | {dl} | {st} | {score} | {tag} |".format(
                 name=_cell(r["name"], 34),
                 cat=r.get("catalog_category") or "未收录",
                 fit=r.get("cs_fit", ""),
                 dl=r.get("registration_last") or "未抽取到",
                 st=r.get("deadline_status", ""),
                 score=r.get("score_total", ""),
+                tag=profile_tags(r),
             )
         )
     return lines
