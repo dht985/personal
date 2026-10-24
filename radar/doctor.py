@@ -182,6 +182,8 @@ def _search(cfg: Config) -> list[Check]:
     env_name = search_cfg.get("key_env", "COMPRADAR_SERPAPI_KEY")
     if not os.environ.get(env_name):
         return [Check("检索引擎", "warn", f"环境变量 {env_name} 未设置，将退回公开引擎")]
+    import requests
+
     from .sources import search_serpapi
     from .net import Fetcher
 
@@ -192,8 +194,23 @@ def _search(cfg: Config) -> list[Check]:
         return [Check("检索引擎", "fail", f"SerpApi 调用异常：{exc}")]
     if not ok:
         return [Check("检索引擎", "fail", "SerpApi 调用失败，请检查 key 或额度")]
-    return [Check("检索引擎", "ok",
-                  f"SerpApi/{search_cfg.get('engine', 'baidu')} 可用，测试查询返回 {len(results)} 条")]
+    checks = [Check("检索引擎", "ok",
+                    f"SerpApi/{search_cfg.get('engine', 'baidu')} 可用，测试查询返回 {len(results)} 条")]
+    try:
+        acc = requests.get("https://serpapi.com/account",
+                           params={"api_key": os.environ.get(env_name)}, timeout=20).json()
+        left = acc.get("plan_searches_left")
+        total = acc.get("searches_per_month")
+        if left is not None:
+            status = "ok" if int(left) > 30 else "warn"
+            checks.append(Check(
+                "搜索额度", status,
+                f"本月剩余 {left}/{total} 次"
+                + ("，接近用完，下一轮可能降级为证据不充分" if int(left) <= 30 else ""),
+            ))
+    except Exception:  # noqa: BLE001
+        pass
+    return checks
 
 
 def _schedule() -> list[Check]:

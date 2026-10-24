@@ -28,6 +28,13 @@ class SearchBlocked(Exception):
 
 
 _SERPAPI_DOWN = False  # 一旦额度用完/鉴权失败，本轮不再反复重试
+_CALLS_THIS_RUN = 0    # 本轮已消耗的真实 API 调用次数（命中缓存不计）
+
+
+def reset_api_budget() -> None:
+    global _CALLS_THIS_RUN, _SERPAPI_DOWN
+    _CALLS_THIS_RUN = 0
+    _SERPAPI_DOWN = False
 
 
 @dataclass
@@ -284,6 +291,7 @@ def search_serpapi(
     而 URL 里带着 api_key，会泄露密钥。这里只把结果按"引擎+查询"缓存。
     """
     global _SERPAPI_DOWN
+    global _CALLS_THIS_RUN
     if _SERPAPI_DOWN:
         return [], False
     search_cfg = (fetcher.cfg.settings.get("search") or {})
@@ -304,6 +312,11 @@ def search_serpapi(
         except (ValueError, KeyError, json.JSONDecodeError):
             pass
 
+    # 免费档 50 次/小时，留出余量，避免一轮把整小时额度用完
+    budget = int(search_cfg.get("max_calls_per_run", 45))
+    if _CALLS_THIS_RUN >= budget:
+        return [], False
+
     params = {
         "engine": engine,
         "q": query,
@@ -312,6 +325,7 @@ def search_serpapi(
     }
     try:
         resp = requests.get(SERPAPI_ENDPOINT, params=params, timeout=40)
+        _CALLS_THIS_RUN += 1
         if resp.status_code in (401, 402, 429):
             _SERPAPI_DOWN = True
             return [], False

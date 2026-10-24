@@ -72,7 +72,7 @@ enabled = true
 # 同一赛事的云大评估结果缓存多少天再重查（每周跑一次，但不必每周重搜）
 refresh_days = 30
 # 单轮最多对多少个赛事做定向检索，防止首轮跑太久
-max_competitions = 80
+max_competitions = 14
 # 每个赛事最多保留多少条检索结果
 max_results = 12
 
@@ -84,3 +84,5 @@ engine = "baidu"
 key_env = "COMPRADAR_SERPAPI_KEY"
 num_results = 10
 cache_hours = 6
+# 单轮最多消耗多少次真实 API 调用（免费档 50 次/小时，留余量）
+max_calls_per_run = 45
