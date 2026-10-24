@@ -257,8 +257,13 @@ def render_digest(
     add(f"- 官方栏目通知：抓取 {stats.get('official_notices', 0)} 条，"
         f"其中计算机相关 {stats.get('cs_notices', 0)} 条")
     add(f"- 详情页核验：{stats.get('detail_fetched', 0)} 条")
+    engines = stats.get("discovery_engines") or {}
+    engine_text = "、".join(f"{k}×{v}" for k, v in engines.items()) or "未使用"
     add(f"- 主动发现检索：{stats.get('discovery_hits', 0)} 条命中，"
-        f"保留 {stats.get('discovery_kept', 0)} 条")
+        f"保留 {stats.get('discovery_kept', 0)} 条（引擎：{engine_text}）")
+    if stats.get("discovery_blocked_queries"):
+        add(f"- ⚠️ 本轮有 {stats['discovery_blocked_queries']} 个检索式因引擎受限未完成，"
+            f"本轮的「新赛事发现」可能不完整")
     add(f"- 归并后赛事实体：{stats.get('records', 0)} 个")
     add(f"- 其中新发现：{stats.get('new_records', 0)} 个；本次检测到变化：{len(changes)} 处")
     add("")

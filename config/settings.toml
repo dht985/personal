@@ -75,3 +75,12 @@ refresh_days = 30
 max_competitions = 80
 # 每个赛事最多保留多少条检索结果
 max_results = 12
+
+[search]
+# 检索入口：serpapi（结构化 API，稳定）| public（爬公开引擎，会跳验证码）
+provider = "serpapi"
+# SerpApi 的引擎。中文高校内容用百度索引覆盖最好
+engine = "baidu"
+key_env = "COMPRADAR_SERPAPI_KEY"
+num_results = 10
+cache_hours = 6

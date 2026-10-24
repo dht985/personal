@@ -17,12 +17,12 @@ from urllib.parse import urlsplit
 
 from .config import Config
 from .net import Fetcher
-from .sources import resolve_redirect, resolve_sogou, search_360, search_sogou
+from .sources import resolve_redirect, resolve_sogou, search_web
 from .textutil import clean_text, normalize_name
 
 YNU_SUFFIXES = ("ynu.edu.cn",)
 # 评估逻辑变化时递增，旧缓存会自动失效重算
-PROFILE_VERSION = 6
+PROFILE_VERSION = 7
 COMMUNITY_HOSTS = (
     "zhihu.com", "tieba.baidu.com", "csdn.net", "jianshu.com", "douban.com",
     "xiaohongshu.com", "bilibili.com", "weibo.com", "mp.weixin.qq.com",
@@ -30,9 +30,11 @@ COMMUNITY_HOSTS = (
 
 # 信息学院/软件学院里固定会提到赛事组织的页面
 CORPUS_PAGES = [
+    ("https://www.ise.ynu.edu.cn/directory/75/", "信息学院竞赛概况"),
     ("https://www.ise.ynu.edu.cn/directory/77/", "信息学院竞赛动态"),
     ("https://www.ise.ynu.edu.cn/news-list/14/", "信息学院竞赛通知"),
     ("https://www.ise.ynu.edu.cn/news-list/6/", "信息学院新闻动态"),
+    ("http://syzx.ise.ynu.edu.cn/sfyl/cbjs.htm", "信息学院实验中心承办竞赛"),
     ("http://www.sei.ynu.edu.cn/xwgg/xyxw.htm", "软件学院学院新闻"),
 ]
 
@@ -182,10 +184,13 @@ def build_corpus(fetcher: Fetcher) -> Corpus:
 
 
 def queries_for(name: str) -> list[str]:
+    """两查询策略：一条查云大层面的存在感，一条同时收获奖与指导教师线索。
+
+    每条都要花一次 API 额度（免费档 250 次/月），所以不做无谓的拆分。
+    """
     return [
-        f"云南大学 信息学院 {name}",
-        f"云南大学 {name} 获奖",
-        f"云南大学 {name} 指导教师",
+        f"云南大学 {name}",
+        f"云南大学 {name} 获奖 指导教师",
     ]
 
 
@@ -194,13 +199,11 @@ def engine_alive(fetcher: Fetcher) -> bool:
 
     360 对过于具体的查询会返回 0 条，那是"确实没有结果"，不能当成检索失败。
     """
-    for fn in (search_sogou, search_360):
-        try:
-            if fn(fetcher, "云南大学 信息学院 全国大学生竞赛", pages=1):
-                return True
-        except Exception:  # noqa: BLE001
-            continue
-    return False
+    try:
+        results, _engine, ok = search_web(fetcher, "云南大学 信息学院 全国大学生竞赛", pages=1)
+        return ok and bool(results)
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _collect_search(
@@ -216,14 +219,12 @@ def _collect_search(
     skipped = 0
     resolved = 0
     for q in queries_for(name):
-        results: list[dict] = []
-        for engine in (search_sogou, search_360):
-            try:
-                results = engine(fetcher, q, pages=1)
-            except Exception:  # noqa: BLE001
-                results = []
-            if results:
-                break
+        try:
+            results, _engine, ok = search_web(fetcher, q, pages=1, ttl_hours=24 * 30)
+        except Exception:  # noqa: BLE001
+            results, ok = [], False
+        if not ok:
+            continue
         if results:
             ok_any = True
         for item in results[:5]:

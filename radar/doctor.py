@@ -172,6 +172,30 @@ def _notify(cfg: Config, send_test: bool) -> list[Check]:
     return out
 
 
+def _search(cfg: Config) -> list[Check]:
+    import os
+
+    search_cfg = cfg.settings.get("search", {}) or {}
+    provider = search_cfg.get("provider", "public")
+    if provider != "serpapi":
+        return [Check("检索引擎", "warn", f"provider={provider}，使用公开引擎，可能被验证码阻断")]
+    env_name = search_cfg.get("key_env", "COMPRADAR_SERPAPI_KEY")
+    if not os.environ.get(env_name):
+        return [Check("检索引擎", "warn", f"环境变量 {env_name} 未设置，将退回公开引擎")]
+    from .sources import search_serpapi
+    from .net import Fetcher
+
+    try:
+        results, ok = search_serpapi(Fetcher(cfg), "云南大学 信息学院 竞赛",
+                                     engine=search_cfg.get("engine", "baidu"))
+    except Exception as exc:  # noqa: BLE001
+        return [Check("检索引擎", "fail", f"SerpApi 调用异常：{exc}")]
+    if not ok:
+        return [Check("检索引擎", "fail", "SerpApi 调用失败，请检查 key 或额度")]
+    return [Check("检索引擎", "ok",
+                  f"SerpApi/{search_cfg.get('engine', 'baidu')} 可用，测试查询返回 {len(results)} 条")]
+
+
 def _schedule() -> list[Check]:
     if not winps.available():
         return [Check("计划任务", "warn", "当前不是 Windows，定时运行请用 cron")]
@@ -208,6 +232,7 @@ def run_checks(cfg: Config, send_test: bool = False) -> list[Check]:
     checks.append(_database(cfg))
     checks.extend(_runtime(cfg))
     checks.extend(_notify(cfg, send_test))
+    checks.extend(_search(cfg))
     checks.extend(_schedule())
     return checks
 

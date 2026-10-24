@@ -97,6 +97,10 @@ def _is_discoverable_competition(title: str, url: str) -> bool:
     # 竞赛导航站/官网首页没有可行动的信息
     if PORTAL_RE.search(title or ""):
         return False
+    # 栏目名本身不是赛事（如"竞赛通知-云南大学信息学院"）
+    head = (title or "").split("-")[0].strip()
+    if head in {"竞赛通知", "竞赛动态", "新闻动态", "通知公告", "学院新闻", "学科竞赛", "竞赛概况"}:
+        return False
     # 搜索引擎自己的结果页不能当赛事页
     if re.search(r"(^|\.)(so\.com|sogou\.com)", url or ""):
         return False
@@ -466,7 +470,7 @@ def run_pipeline(
     log("[4/6] 主动发现通道检索")
     discovery: list[dict] = []
     if use_search and not offline:
-        hits = collect_discovery(cfg, fetcher)
+        hits = collect_discovery(cfg, fetcher, stats=stats)
         stats["discovery_hits"] = len(hits)
         for h in hits:
             keep = _keep_discovery(h, cfg)
@@ -623,6 +627,8 @@ def run_pipeline(
             rec["ynu_profile"] = profile.as_dict()
             rec["profile_checked_at"] = _now()
             profiles_done += 1
+            if profiles_done % 5 == 0:
+                log(f"      云大生态评估进度：{profiles_done}/{min(len(records), profile_budget)}")
         else:
             rec["ynu_profile"] = {
                 "verdict": "unassessed",

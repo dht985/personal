@@ -65,7 +65,8 @@ class Catalog:
         """返回 (命中条目, 置信度, 匹配方式)。匹配不上说明该赛事未在当前目录中。"""
         if not name or not self.entries:
             return None, 0.0, "no-catalog"
-        target = normalize_name(name)
+        # 常见近义词：目录写"团体程序设计"，通知写"团队程序设计"
+        target = normalize_name(name).replace("团队", "团体")
         if not target:
             return None, 0.0, "empty"
 
