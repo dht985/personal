@@ -14,6 +14,13 @@ Set-Location $projectDir
 
 $env:PYTHONIOENCODING = "utf-8"
 
+# The scheduled task may inherit a stale environment block, so read the user-level
+# variable straight from the registry when it is missing from the process.
+if (-not $env:COMPRADAR_SERPAPI_KEY) {
+    $apiKey = [Environment]::GetEnvironmentVariable("COMPRADAR_SERPAPI_KEY", "User")
+    if ($apiKey) { $env:COMPRADAR_SERPAPI_KEY = $apiKey }
+}
+
 $outboxDir = Join-Path $projectDir "outbox"
 if (-not (Test-Path -LiteralPath $outboxDir)) {
     New-Item -ItemType Directory -Path $outboxDir | Out-Null
