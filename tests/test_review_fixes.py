@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
+import tempfile
 import tomllib
 import unittest
 from pathlib import Path
@@ -14,6 +16,7 @@ sys.path.insert(0, str(ROOT))
 from radar.catalog import Catalog  # noqa: E402
 from radar.config import load_config  # noqa: E402
 from radar.evaluate import classify_organizer, evaluate  # noqa: E402
+from radar.store import Store  # noqa: E402
 
 
 class TestCatalogConflict(unittest.TestCase):
@@ -97,6 +100,105 @@ class TestConfigHygiene(unittest.TestCase):
         threshold = scoring["tier_rules"]["focus_min_score"]
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn(f"总分 ≥ {threshold}", readme)
+
+
+class TestCatalogAliasesAndStages(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        path = ROOT / "data" / "catalog_ynu_2026.json"
+        if not path.exists():
+            raise unittest.SkipTest("目录数据不存在")
+        cls.catalog = Catalog.load(path)
+
+    def test_icpc_alias(self):
+        entry, _score, method = self.catalog.match("国际大学生程序设计竞赛（ICPC）")
+        self.assertIsNotNone(entry)
+        self.assertIn("ICPC", entry.name)
+        self.assertEqual(method, "alias-reorder")
+
+    def test_stage_suffix_does_not_break_match(self):
+        entry, _score, _method = self.catalog.match("华为ICT大赛全球总决赛")
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry.name, "华为ICT大赛")
+
+    def test_stage_suffix_does_not_rescue_different_competition(self):
+        entry, _score, _method = self.catalog.match("美国大学生数学建模竞赛全球总决赛")
+        self.assertIsNone(entry)
+
+
+class TestMigrationAndRetry(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self.tmp.name) / "migrate.db"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_migrate_adds_new_columns_to_existing_db(self):
+        """模拟旧库：先建完整 schema，再删掉新列，验证 Store 能补回来且数据不丢。"""
+        store = Store(self.path)
+        store.conn.execute(
+            "INSERT INTO competitions (key, name, first_seen, last_verified) "
+            "VALUES (?, ?, ?, ?)",
+            ("catalog:旧赛事", "旧赛事", "2026-01-01", "2026-01-01"),
+        )
+        store.conn.commit()
+        store.close()
+
+        con = sqlite3.connect(str(self.path))
+        for column in (
+            "ynu_verdict", "ynu_evidence", "mentor_dependency", "difficulty",
+            "requirement_evidence", "visibility", "profile_checked_at",
+        ):
+            con.execute(f"ALTER TABLE competitions DROP COLUMN {column}")
+        for column in ("attempts", "last_error"):
+            con.execute(f"ALTER TABLE push_log DROP COLUMN {column}")
+        con.commit()
+        con.close()
+
+        reopened = Store(self.path)
+        comp_cols = {r["name"] for r in reopened.conn.execute("PRAGMA table_info(competitions)")}
+        push_cols = {r["name"] for r in reopened.conn.execute("PRAGMA table_info(push_log)")}
+        self.assertIn("ynu_verdict", comp_cols)
+        self.assertIn("profile_checked_at", comp_cols)
+        self.assertIn("attempts", push_cols)
+        row = reopened.conn.execute("SELECT name FROM competitions").fetchone()
+        self.assertEqual(row["name"], "旧赛事")
+        reopened.close()
+
+    def test_failed_push_stays_pending_and_retries(self):
+        store = Store(self.path)
+        store.start_run()
+        comp_id = store.upsert_competition(
+            {"key": "catalog:测试", "name": "测试赛事"},
+            first_seen="2026-01-01", last_verified="2026-01-01",
+        )
+        key = "catalog:测试|临近截止|2026-10-30"
+        self.assertTrue(store.queue_push(key, comp_id, "测试赛事", "临近截止", "标题", "正文"))
+
+        ids = [r["id"] for r in store.pending_pushes()]
+        self.assertEqual(len(ids), 1)
+
+        # 第一次投递失败：保持 pending，记录错误与次数
+        store.mark_pushes(ids, status="pending", error="network down")
+        pending = store.pending_pushes()
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0]["attempts"], 1)
+        self.assertEqual(pending[0]["last_error"], "network down")
+
+        # 失败后不应重复入队
+        self.assertFalse(store.queue_push(key, comp_id, "测试赛事", "临近截止", "标题", "正文"))
+
+        # 重试成功：移出待推送，sent_at 写入，次数累加
+        store.mark_pushes([pending[0]["id"]], status="sent")
+        self.assertEqual(store.pending_pushes(), [])
+        row = store.conn.execute(
+            "SELECT * FROM push_log WHERE id = ?", (pending[0]["id"],)
+        ).fetchone()
+        self.assertEqual(row["status"], "sent")
+        self.assertEqual(row["attempts"], 2)
+        self.assertIsNotNone(row["sent_at"])
+        store.close()
 
 
 if __name__ == "__main__":

@@ -614,13 +614,19 @@ def run_pipeline(
 
         # ---- 云大生态评估：知名度 / 导师资源 / 获奖先例 ----
         cached_profile = None
+        stale_profile = None
         if prev is not None and prev["profile_checked_at"] and prev["ynu_evidence"]:
             try:
+                parsed = json.loads(prev["ynu_evidence"])
                 age = datetime.now().astimezone() - datetime.fromisoformat(prev["profile_checked_at"])
-                if age.days < int(rep_cfg.get("refresh_days", 30)):
-                    cached_profile = json.loads(prev["ynu_evidence"])
-                if cached_profile and cached_profile.get("version") != PROFILE_VERSION:
-                    cached_profile = None  # 评估逻辑升级过，旧结论作废
+                if (
+                    age.days < int(rep_cfg.get("refresh_days", 30))
+                    and parsed.get("version") == PROFILE_VERSION
+                ):
+                    cached_profile = parsed
+                elif parsed.get("verdict") in ("sufficient", "inconclusive", "insufficient"):
+                    # 版本升级/缓存过期时，先沿用旧结论，别让赛事因为没来得及重算就消失
+                    stale_profile = parsed
             except (ValueError, json.JSONDecodeError):
                 cached_profile = None
 
@@ -635,13 +641,19 @@ def run_pipeline(
             profiles_done += 1
             if profiles_done % 5 == 0:
                 log(f"      云大生态评估进度：{profiles_done}/{min(len(records), profile_budget)}")
+        elif stale_profile is not None:
+            reused = dict(stale_profile)
+            reused["stale"] = True
+            reused.setdefault("notes", []).append("本轮额度不足，沿用上次评估结论")
+            rec["ynu_profile"] = reused
+            rec["profile_checked_at"] = prev["profile_checked_at"]
         else:
             rec["ynu_profile"] = {
-                "verdict": "unassessed",
+                "verdict": "pending",
                 "in_catalog": bool(rec.get("catalog_category")),
                 "queries_run": 0,
                 "search_ok": False,
-                "notes": ["本轮评估预算用尽，尚未检索；下一轮优先补查"],
+                "notes": ["本轮额度不足，尚未检索；按「证据不充分」先纳入，下一轮补查"],
                 "dimensions": [],
             }
             rec["profile_checked_at"] = None
@@ -649,7 +661,6 @@ def run_pipeline(
         rec["ynu_verdict"] = rec["ynu_profile"]["verdict"]
         rec["visibility"] = (
             "excluded" if rec["ynu_verdict"] == "insufficient"
-            else "unassessed" if rec["ynu_verdict"] == "unassessed"
             else "included"
         )
         req = assess_requirement(rec)
@@ -665,14 +676,6 @@ def run_pipeline(
             rec["dimensions"] = []
             rec["risks"] = ["云大缺乏知名度、导师资源与获奖先例"]
             rec["next_actions"] = ["若确认校内有人组织或指导，可重新评估纳入"]
-        elif rec["visibility"] == "unassessed":
-            rec["tier"] = "待评估"
-            rec["tier_reason"] = "尚未完成云大生态检索，本轮不展示，下一轮优先补查"
-            rec["score_total"] = None
-            rec["verified_dimensions"] = 0
-            rec["dimensions"] = []
-            rec["risks"] = []
-            rec["next_actions"] = []
         else:
             evaluate(
                 rec, cfg, catalog_meta, history_years=len(known_years),
@@ -729,10 +732,10 @@ def run_pipeline(
     stats["new_records"] = new_count
     included = [r for r in records.values() if r.get("visibility") == "included"]
     excluded = [r for r in records.values() if r.get("visibility") == "excluded"]
-    unassessed = [r for r in records.values() if r.get("visibility") == "unassessed"]
+    pending = [r for r in records.values() if r.get("ynu_verdict") == "pending"]
     stats["records"] = len(included)
     stats["excluded"] = len(excluded)
-    stats["unassessed"] = len(unassessed)
+    stats["pending_profiles"] = len(pending)
     stats["changes"] = len(changes)
     stats["pushes"] = push_count
 
@@ -779,7 +782,7 @@ def run_pipeline(
         "changes": changes,
         "records": [_serializable(r) for r in ordered],
         "excluded": [_serializable(r) for r in excluded],
-        "unassessed": [_serializable(r) for r in unassessed],
+        "pending": [_serializable(r) for r in pending],
         "discovery": discovery,
     }
     cfg.candidates_path.parent.mkdir(parents=True, exist_ok=True)

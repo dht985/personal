@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import difflib
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,6 +19,31 @@ GENERIC_PARTS = [
 # 同一赛事体系下不同赛事的限定词。若目标里出现而目录条目里没有，
 # 说明是另一场比赛（如"美国大学生数学建模竞赛" vs 全国赛），不能当成同一条。
 CONFLICT_QUALIFIERS = ("美国", "亚太", "欧洲", "亚洲", "世界", "全球", "国际")
+
+# 阶段后缀：目录里是"华为ICT大赛"，通知写"华为ICT大赛全球总决赛"。
+# 这类后缀不能影响赛事识别，也不能让"全球"触发冲突词。
+STAGE_SUFFIX_RE = re.compile(
+    r"(?:全球|全国|国际|区域|大区|省级|校级)?"
+    r"(?:总决赛|决赛|半决赛|复赛|初赛|选拔赛|邀请赛|分赛区|赛区|区域赛|省赛|校赛)$"
+)
+
+# 同一赛事的常见写法
+ALIASES = (("acmicpc", "icpc"),)
+
+
+def _apply_aliases(text: str) -> str:
+    for src, dst in ALIASES:
+        text = text.replace(src, dst)
+    return text
+
+
+def _strip_stage(text: str) -> str:
+    return STAGE_SUFFIX_RE.sub("", text)
+
+
+def _is_reordered_same(a: str, b: str) -> bool:
+    """字符完全相同、只是顺序不同（如"国际大学生程序设计竞赛icpc" vs "icpc国际..."）。"""
+    return len(a) >= 8 and len(a) == len(b) and sorted(a) == sorted(b)
 
 
 def _distinctive_chunks(name: str) -> list[str]:
@@ -47,7 +73,7 @@ class Catalog:
     def __init__(self, entries: list[CatalogEntry], meta: dict | None = None):
         self.entries = entries
         self.meta = meta or {}
-        self._norm = [(normalize_name(e.name), e) for e in entries]
+        self._norm = [(_apply_aliases(normalize_name(e.name)), e) for e in entries]
         self._chunks = [(_distinctive_chunks(e.name), e) for e in entries]
 
     @classmethod
@@ -69,16 +95,32 @@ class Catalog:
         """返回 (命中条目, 置信度, 匹配方式)。匹配不上说明该赛事未在当前目录中。"""
         if not name or not self.entries:
             return None, 0.0, "no-catalog"
-        # 常见近义词：目录写"团体程序设计"，通知写"团队程序设计"
-        target = normalize_name(name).replace("团队", "团体")
-        if not target:
+        # 常见近义词 + 别名 + 阶段后缀
+        raw = _apply_aliases(normalize_name(name).replace("团队", "团体"))
+        if not raw:
             return None, 0.0, "empty"
+        targets = [raw]
+        stripped = _strip_stage(raw)
+        if stripped and stripped != raw:
+            targets.append(stripped)
 
+        for target in targets:
+            result = self._match_one(target, threshold)
+            if result[0] is not None:
+                return result
+        return None, 0.0, "miss"
+
+    def _match_one(
+        self, target: str, threshold: float
+    ) -> tuple[CatalogEntry | None, float, str]:
         def compatible(entry: CatalogEntry) -> bool:
-            entry_norm = normalize_name(entry.name)
+            entry_norm = _apply_aliases(normalize_name(entry.name))
             return not any(
                 q in target and q not in entry_norm for q in CONFLICT_QUALIFIERS
             )
+
+        def norm_of(entry: CatalogEntry) -> str:
+            return _apply_aliases(normalize_name(entry.name))
 
         # 1) 直接包含（通知标题通常包含完整赛事名）
         best_contain: tuple[CatalogEntry | None, float] = (None, 0.0)
@@ -87,6 +129,8 @@ class Catalog:
                 continue
             if not compatible(entry):
                 continue
+            if _is_reordered_same(target, norm):
+                return entry, 0.95, "alias-reorder"
             if norm in target or target in norm:
                 ratio = min(len(norm), len(target)) / max(len(norm), len(target))
                 score = 0.80 + 0.15 * ratio
@@ -117,7 +161,9 @@ class Catalog:
             if len(chunks) == 1 and len(chunks[0]) < 6:
                 continue
             if all(c in target for c in chunks):
-                score = 0.75 + 0.2 * min(1.0, len("".join(chunks)) / max(len(normalize_name(entry.name)), 1))
+                score = 0.75 + 0.2 * min(
+                    1.0, len("".join(chunks)) / max(len(norm_of(entry)), 1)
+                )
                 if score > best_chunk[1]:
                     best_chunk = (entry, score)
         if best_chunk[0] is not None:

@@ -22,7 +22,7 @@ from .textutil import clean_text, normalize_name
 
 YNU_SUFFIXES = ("ynu.edu.cn",)
 # 评估逻辑变化时递增，旧缓存会自动失效重算
-PROFILE_VERSION = 7
+PROFILE_VERSION = 8
 COMMUNITY_HOSTS = (
     "zhihu.com", "tieba.baidu.com", "csdn.net", "jianshu.com", "douban.com",
     "xiaohongshu.com", "bilibili.com", "weibo.com", "mp.weixin.qq.com",
@@ -330,10 +330,19 @@ def assess(
         queries_run = cached.get("queries_run", 0)
         search_ok = cached.get("search_ok", True)
     elif do_search:
+        expected = len(queries_for(name))
         hits, ok_any, skipped, queries_ok = _collect_search(fetcher, name)
-        # 有结果说明引擎正常；没结果时用 canary 结果判定"确实没有"还是"检索挂了"
-        search_ok = ok_any or engine_ok
+        # 只有当所有查询都正常完成时，"没找到"才能当成"确实没有"；
+        # 中途一条失败就说明证据不完整，必须按"证据不充分"处理（仍纳入）。
+        search_ok = queries_ok == expected
         queries_run = queries_ok
+        if not search_ok:
+            notes.append(
+                f"检索未全部完成（{queries_ok}/{expected}），"
+                "按证据不充分处理，不下「不足」结论"
+            )
+        elif not engine_ok:
+            notes.append("检索引擎 canary 未通过，但本次查询均已完成")
         if skipped:
             notes.append(f"另有 {skipped} 条结果因标题/摘要无云大线索未展开（外校结果居多）")
         for hit in hits:

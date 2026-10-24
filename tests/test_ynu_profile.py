@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -103,6 +104,45 @@ class TestVerdict(unittest.TestCase):
         profile = assess(record, Corpus(), None, None, do_search=False)
         self.assertIsNotNone(corpus)  # 语料构建可用
         self.assertEqual(profile.verdict, "insufficient")
+
+    def _non_ynu_record(self, name):
+        return _record(name, notices=[
+            {"title": "赛事启动", "url": "https://example.com/a.htm",
+             "body_excerpt": f"{name}开始报名"},
+        ])
+
+    def test_partial_search_failure_is_inconclusive(self):
+        """两条查询一条成功一条失败：不能因为"没搜到"就判不足。"""
+        calls = []
+
+        def fake_search(fetcher, query, pages=1, ttl_hours=None):
+            calls.append(query)
+            if len(calls) == 1:
+                return [], "serpapi-baidu", True
+            return [], "none", False
+
+        from radar import ynu_profile
+
+        with mock.patch.object(ynu_profile, "search_web", side_effect=fake_search):
+            profile = assess(self._non_ynu_record("某个不知名杯赛"), Corpus(), None, None,
+                             do_search=True)
+
+        self.assertEqual(profile.verdict, "inconclusive")
+        self.assertEqual(profile.queries_run, 1)
+        self.assertTrue(any("检索未全部完成" in n for n in profile.notes))
+
+    def test_all_queries_complete_without_evidence_is_insufficient(self):
+        def fake_search(fetcher, query, pages=1, ttl_hours=None):
+            return [], "serpapi-baidu", True
+
+        from radar import ynu_profile
+
+        with mock.patch.object(ynu_profile, "search_web", side_effect=fake_search):
+            profile = assess(self._non_ynu_record("某个不知名杯赛"), Corpus(), None, None,
+                             do_search=True)
+
+        self.assertEqual(profile.verdict, "insufficient")
+        self.assertEqual(profile.queries_run, 2)
 
 
 class TestRequirement(unittest.TestCase):

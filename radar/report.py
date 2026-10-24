@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
@@ -11,7 +12,12 @@ NOT_FOUND = "未找到可靠来源（需人工补充）"
 
 TIER_ORDER = ["重点关注", "潜在机会", "低优先级/证据不足"]
 
-VERDICT_LABEL = {"sufficient": "充足", "inconclusive": "证据不充分", "insufficient": "不足"}
+VERDICT_LABEL = {
+    "sufficient": "充足",
+    "inconclusive": "证据不充分",
+    "insufficient": "不足",
+    "pending": "待核查",
+}
 MENTOR_LABEL = {"required": "需导师", "self": "可自主", "pending": "待确认"}
 DIM_LABEL = {"awareness": "知名度", "mentor": "导师资源", "awards": "获奖先例"}
 
@@ -266,6 +272,13 @@ def render_digest(
         add(f"- ⚠️ 本轮有 {stats['discovery_blocked_queries']} 个检索式因引擎受限未完成，"
             f"本轮的「新赛事发现」可能不完整")
     add(f"- 归并后赛事实体：{stats.get('records', 0)} 个")
+    verdicts = Counter((r.get("ynu_profile") or {}).get("verdict") for r in records)
+    add(
+        f"- 云大生态：充足 {verdicts.get('sufficient', 0)}、"
+        f"证据不充分 {verdicts.get('inconclusive', 0)}、"
+        f"待核查 {verdicts.get('pending', 0)}；"
+        f"已排除 {stats.get('excluded', 0)}"
+    )
     add(f"- 其中新发现：{stats.get('new_records', 0)} 个；本次检测到变化：{len(changes)} 处")
     add("")
 
