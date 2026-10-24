@@ -26,3 +26,6 @@ venv/
 .DS_Store
 Thumbs.db
 *.log
+
+# Agent 信箱的本地已读状态（每台机器不同）
+collab/state.json
