@@ -732,10 +732,12 @@ def run_pipeline(
     stats["new_records"] = new_count
     included = [r for r in records.values() if r.get("visibility") == "included"]
     excluded = [r for r in records.values() if r.get("visibility") == "excluded"]
-    pending = [r for r in records.values() if r.get("ynu_verdict") == "pending"]
+    pending_profiles = [
+        r for r in records.values() if r.get("ynu_verdict") == "pending"
+    ]
     stats["records"] = len(included)
     stats["excluded"] = len(excluded)
-    stats["pending_profiles"] = len(pending)
+    stats["pending_profiles"] = len(pending_profiles)
     stats["changes"] = len(changes)
     stats["pushes"] = push_count
 
@@ -782,7 +784,7 @@ def run_pipeline(
         "changes": changes,
         "records": [_serializable(r) for r in ordered],
         "excluded": [_serializable(r) for r in excluded],
-        "pending": [_serializable(r) for r in pending],
+        "pending": [_serializable(r) for r in pending_profiles],
         "discovery": discovery,
     }
     cfg.candidates_path.parent.mkdir(parents=True, exist_ok=True)
@@ -846,5 +848,7 @@ def _card_slug(record: dict) -> str:
 
 
 def _serializable(record: dict) -> dict:
+    # 防御：即使误传了 sqlite3.Row，也先转成 dict 再序列化
+    record = dict(record)
     out = {k: v for k, v in record.items() if not k.startswith("_")}
     return out

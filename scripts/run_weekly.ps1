@@ -40,12 +40,38 @@ function Get-Stamp {
 Write-Log "[$(Get-Stamp)] competition radar: weekly run started"
 
 try {
-    python -m radar run 2>&1 | ForEach-Object { Write-Log $_ }
-    if ($LASTEXITCODE -ne 0) {
-        throw "radar run exited with code $LASTEXITCODE"
+    $runLog = Join-Path $outboxDir "last-run.log"
+    $previousEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    python -m radar run *> $runLog
+    $runCode = $LASTEXITCODE
+    $ErrorActionPreference = $previousEap
+
+    if (Test-Path -LiteralPath $runLog) {
+        Get-Content -LiteralPath $runLog -Encoding UTF8 | ForEach-Object { Write-Log $_ }
+    }
+    if ($runCode -ne 0) {
+        throw "radar run exited with code $runCode (full output above)"
     }
 
     python -m radar verify --limit 40 2>&1 | ForEach-Object { Write-Log $_ }
+
+    # 只有本轮真的有需要行动的信息时才自动打开仪表盘，避免每周无意义弹浏览器
+    $alertFile = Join-Path $outboxDir ("notifications-" + (Get-Date -Format "yyyy-MM-dd") + ".md")
+    $candidates = Join-Path $projectDir "data\candidates.json"
+    $shouldOpen = $false
+    if (Test-Path -LiteralPath $candidates) {
+        try {
+            $data = Get-Content -LiteralPath $candidates -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($data.stats.notifications -gt 0) { $shouldOpen = $true }
+        } catch {
+            $shouldOpen = $false
+        }
+    }
+    if ($shouldOpen) {
+        Write-Log "there are $($data.stats.notifications) actionable notifications; opening dashboard"
+        python -m radar dashboard --open 2>&1 | ForEach-Object { Write-Log $_ }
+    }
 
     Write-Log "[$(Get-Stamp)] finished. reports are in outbox\"
 }

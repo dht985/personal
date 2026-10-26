@@ -200,6 +200,16 @@ class TestMigrationAndRetry(unittest.TestCase):
         self.assertIsNotNone(row["sent_at"])
         store.close()
 
+    def test_serializable_accepts_sqlite_row(self):
+        """回归：pipeline 里曾把待推送的 sqlite3.Row 当成赛事记录序列化。"""
+        from radar.pipeline import _serializable
+
+        con = sqlite3.connect(":memory:")
+        con.row_factory = sqlite3.Row
+        row = con.execute("SELECT 1 AS id, 'x' AS name").fetchone()
+        con.close()
+        self.assertEqual(_serializable(row), {"id": 1, "name": "x"})
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
