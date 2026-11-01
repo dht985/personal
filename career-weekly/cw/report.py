@@ -27,7 +27,8 @@ def _line(item: dict, cfg) -> str:
     when = f"，{item['published_at']}" if item.get("published_at") else ""
     link = f"[{src}]({item['url']}){when}"
     tail = f"　收录理由：{reason}" if reason else ""
-    return f"- **{meta}** — {item['title']}（{link}）{tail}"
+    flag = "🆕 " if item.get("is_new") else ""
+    return f"- {flag}**{meta}** — {item['title']}（{link}）{tail}"
 
 
 def render(items: list[dict], cfg, stats: dict) -> str:
@@ -39,7 +40,9 @@ def render(items: list[dict], cfg, stats: dict) -> str:
         f"- 覆盖：{stats.get('sources_ok', 0)}/{stats.get('sources_total', 0)} 个信源；"
         f"抓取 {stats.get('raw_items', 0)} 条，AI 筛选 {stats.get('triaged', 0)} 条，"
         f"最终收录 {len(items)} 条",
-        f"- 新增：{stats.get('new_items', 0)} 条；未能生成：{stats.get('failed_sources', 0)} 个源",
+        f"- 本周新增 {stats.get('new_items', 0)} 条（🆕 标注）；"
+        f"跨源去重 {stats.get('duplicates', 0)} 条；"
+        f"未能生成：{stats.get('failed_sources', 0)} 个源",
         "",
     ]
 

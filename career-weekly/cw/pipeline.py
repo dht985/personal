@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+import re
 
 from .classify import is_relevant, match_tags, match_tracks, signal_type
 from .browser import render_many
@@ -13,6 +14,12 @@ from .parse import parse_list
 from .report import render
 from .store import Store
 from .toast import send as send_toast
+
+
+def _event_key(title: str) -> str:
+    """同一事件在不同来源的标题可能带日期前缀或标点差异。"""
+    t = re.sub(r"^20\d{2}[.\-/年]\d{1,2}[.\-/月]\d{1,2}日?\s*", "", title or "")
+    return re.sub(r"[\s\W_]+", "", t)[:60]
 
 
 def run(
@@ -98,6 +105,21 @@ def run(
             raw_items.append(item)
         log(f"  {src['name']}: {len(raw_items)} 条累计")
 
+    # 跨源去重：同一事件在集团/子公司都发时，按"标题+日期"归并，保留更具体的层级
+    by_event: dict[tuple[str, str], dict] = {}
+    duplicates = 0
+    for item in raw_items:
+        key = (_event_key(item["title"]), item.get("published_at") or "")
+        prev = by_event.get(key)
+        if prev is None:
+            by_event[key] = item
+        elif item["level"] > prev["level"]:
+            by_event[key] = item
+            duplicates += 1
+        else:
+            duplicates += 1
+    raw_items = list(by_event.values())
+
     # 先按规则排序，再交给 AI 做批量收录判断（不做解读）
     raw_items.sort(key=lambda x: x.get("published_at") or "", reverse=True)
     raw_items.sort(
@@ -167,6 +189,7 @@ def run(
         "failed_sources_list": failed,
         "raw_items": len(raw_items),
         "new_items": sum(1 for i in raw_items if i["is_new"]),
+        "duplicates": duplicates,
         "triaged": len(triaged),
         "ai_included": len(included),
         "ai_excluded": len(triaged) - len(included),

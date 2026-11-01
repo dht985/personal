@@ -177,6 +177,20 @@ name = "211所·人工维护"
 path = "manual/211.md"
 
 [[source]]
+id = "manual-sgcc"
+unit = "sgcc"
+kind = "manual"
+name = "国家电网·人工维护"
+path = "manual/sgcc.md"
+
+[[source]]
+id = "manual-cnpc"
+unit = "cnpc"
+kind = "manual"
+name = "中国石油·人工维护"
+path = "manual/cnpc.md"
+
+[[source]]
 id = "casc-news"
 unit = "casc"
 name = "航天科技·新闻中心"
