@@ -1,0 +1,56 @@
+# 赛道保持开放，单位通过关键词映射到赛道
+
+[[track]]
+id = "industrial-software"
+name = "工业软件"
+keywords = ["工业软件", "仿真", "实时", "嵌入式软件", "CAD", "CAE", "控制系统", "国产化"]
+
+[[track]]
+id = "embedded"
+name = "嵌入式与实时系统"
+keywords = ["嵌入式", "芯片", "RTOS", "驱动", "FPGA", "DSP", "硬件", "单片机"]
+
+[[track]]
+id = "ai"
+name = "人工智能与算法"
+keywords = ["人工智能", "算法", "大模型", "机器学习", "深度学习", "图像", "智能"]
+
+[[track]]
+id = "data"
+name = "数据平台"
+keywords = ["大数据", "数据库", "数据平台", "数据治理", "时序", "数据中台"]
+
+[[track]]
+id = "security"
+name = "网络安全"
+keywords = ["网络安全", "信息安全", "密码", "攻防", "保密"]
+
+[[track]]
+id = "product"
+name = "产品与解决方案"
+keywords = ["产品", "解决方案", "需求", "交付", "客户"]
+
+[[track]]
+id = "testing"
+name = "测试与质量"
+keywords = ["测试", "质量", "验证", "可靠性"]
+
+[[tag]]
+id = "energy"
+name = "计算机+能源"
+keywords = ["电力", "电网", "能源", "发电", "新能源", "储能"]
+
+[[tag]]
+id = "defense"
+name = "计算机+军工"
+keywords = ["军工", "装备", "国防", "型号", "武器"]
+
+[[tag]]
+id = "manufacturing"
+name = "计算机+制造"
+keywords = ["制造", "工业", "生产线", "智能制造"]
+
+[[tag]]
+id = "medical"
+name = "计算机+医学"
+keywords = ["医疗", "医学", "医院", "临床", "影像"]

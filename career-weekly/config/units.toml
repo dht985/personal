@@ -1,0 +1,317 @@
+# 单位三级模型：L1 集团总部 / L2 院所或子公司 / L3 下属部门、实验室
+# tier: core（深度监控）/ watch（轻量监控）/ reserve（只登记）
+
+[[unit]]
+id = "cetc"
+name = "中国电子科技集团有限公司"
+short = "中国电科"
+home = "https://www.cetc.com.cn/"
+level = 1
+category = "军工"
+region = "全国"
+tier = "core"
+
+[[unit]]
+id = "cetc-54"
+name = "中国电科网络通信研究院（54所）"
+short = "54所"
+home = "https://www.cti.ac.cn/"
+level = 2
+parent = "cetc"
+category = "军工"
+region = "石家庄"
+tier = "core"
+note = "官网 cti.ac.cn，标题为“中国电科网络通信研究院”"
+
+[[unit]]
+id = "norinco"
+name = "中国兵器工业集团有限公司"
+short = "兵器工业"
+home = "http://www.norincogroup.com.cn/"
+level = 1
+category = "军工"
+region = "全国"
+tier = "core"
+
+[[unit]]
+id = "norinco-211"
+name = "昆明物理研究所（211所）"
+short = "211所"
+level = 2
+parent = "norinco"
+category = "军工"
+region = "昆明"
+tier = "core"
+note = "暂无公开官网；云大就业网企业页 jobs.ynu.edu.cn/company/view/id/490636 为 JS 渲染"
+
+[[unit]]
+id = "csg"
+name = "中国南方电网有限责任公司"
+short = "南方电网"
+home = "https://www.csg.cn/"
+level = 1
+category = "能源"
+region = "全国"
+tier = "core"
+
+[[unit]]
+id = "csg-digital"
+name = "南方电网数字电网研究院股份有限公司"
+short = "南网数字"
+home = "https://nwsyy.csg.cn/"
+level = 2
+parent = "csg"
+category = "能源"
+region = "广州"
+tier = "core"
+note = "官网 nwsyy.csg.cn；资讯页为 JS 渲染，研发页可直采"
+
+[[unit]]
+id = "chnenergy"
+name = "国家能源投资集团有限责任公司"
+short = "国家能源集团"
+home = "https://www.ceic.com/"
+level = 1
+category = "能源"
+region = "全国"
+tier = "core"
+
+[[unit]]
+id = "yndl"
+name = "云南电网有限责任公司"
+short = "云南电网"
+level = 2
+parent = "csg"
+category = "能源"
+region = "昆明"
+tier = "watch"
+note = "省属/驻地能源国企示例，源待补"
+
+# ---- 以下为军工/能源央企补充登记（观察层，官网可抓的先接源） ----
+
+[[unit]]
+id = "sgcc"
+name = "国家电网有限公司"
+short = "国家电网"
+home = "http://www.sgcc.com.cn/"
+level = 1
+category = "能源"
+region = "全国"
+tier = "watch"
+note = "官网返回 412，需浏览器渲染"
+
+[[unit]]
+id = "cnpc"
+name = "中国石油天然气集团有限公司"
+short = "中国石油"
+home = "https://www.cnpc.com.cn/"
+level = 1
+category = "能源"
+region = "全国"
+tier = "watch"
+note = "官网返回 412"
+
+[[unit]]
+id = "sinopec"
+name = "中国石油化工集团有限公司"
+short = "中国石化"
+home = "http://www.sinopecgroup.com/"
+level = 1
+category = "能源"
+region = "全国"
+tier = "watch"
+
+[[unit]]
+id = "cnooc"
+name = "中国海洋石油集团有限公司"
+short = "中国海油"
+home = "https://www.cnooc.com.cn/"
+level = 1
+category = "能源"
+region = "全国"
+tier = "watch"
+note = "首页正文为空，需换栏目页"
+
+[[unit]]
+id = "chng"
+name = "中国华能集团有限公司"
+short = "中国华能"
+home = "https://www.chng.com.cn/"
+level = 1
+category = "能源"
+region = "全国"
+tier = "watch"
+
+[[unit]]
+id = "cdt"
+name = "中国大唐集团有限公司"
+short = "中国大唐"
+home = "https://www.china-cdt.com/"
+level = 1
+category = "能源"
+region = "全国"
+tier = "watch"
+
+[[unit]]
+id = "chd"
+name = "中国华电集团有限公司"
+short = "中国华电"
+home = "https://www.chd.com.cn/"
+level = 1
+category = "能源"
+region = "全国"
+tier = "watch"
+
+[[unit]]
+id = "spic"
+name = "国家电力投资集团有限公司"
+short = "国家电投"
+home = "https://www.spic.com.cn/"
+level = 1
+category = "能源"
+region = "全国"
+tier = "watch"
+
+[[unit]]
+id = "ctg"
+name = "中国长江三峡集团有限公司"
+short = "中国三峡"
+home = "https://www.ctg.com.cn/"
+level = 1
+category = "能源"
+region = "全国"
+tier = "watch"
+
+[[unit]]
+id = "cgn"
+name = "中国广核集团有限公司"
+short = "中广核"
+home = "https://www.cgnpc.com.cn/"
+level = 1
+category = "能源"
+region = "全国"
+tier = "watch"
+
+[[unit]]
+id = "pipechina"
+name = "国家石油天然气管网集团有限公司"
+short = "国家管网"
+home = "https://www.pipechina.com.cn/"
+level = 1
+category = "能源"
+region = "全国"
+tier = "watch"
+
+[[unit]]
+id = "chinacoal"
+name = "中国中煤能源集团有限公司"
+short = "中国中煤"
+home = "https://www.chinacoal.com/"
+level = 1
+category = "能源"
+region = "全国"
+tier = "watch"
+
+[[unit]]
+id = "powerchina"
+name = "中国电力建设集团有限公司"
+short = "中国电建"
+home = "https://www.powerchina.cn/"
+level = 1
+category = "能源"
+region = "全国"
+tier = "watch"
+
+[[unit]]
+id = "ceec"
+name = "中国能源建设集团有限公司"
+short = "中国能建"
+home = "https://www.ceec.net.cn/"
+level = 1
+category = "能源"
+region = "全国"
+tier = "watch"
+
+[[unit]]
+id = "casc"
+name = "中国航天科技集团有限公司"
+short = "航天科技"
+home = "https://www.spacechina.com/"
+level = 1
+category = "军工"
+region = "全国"
+tier = "watch"
+note = "首页正文为空，需换栏目页"
+
+[[unit]]
+id = "casic"
+name = "中国航天科工集团有限公司"
+short = "航天科工"
+home = "https://www.casic.com.cn/"
+level = 1
+category = "军工"
+region = "全国"
+tier = "watch"
+note = "连接失败，需重试或换域名"
+
+[[unit]]
+id = "avic"
+name = "中国航空工业集团有限公司"
+short = "航空工业"
+home = "https://www.avic.com/"
+level = 1
+category = "军工"
+region = "全国"
+tier = "watch"
+
+[[unit]]
+id = "cssc"
+name = "中国船舶集团有限公司"
+short = "中国船舶"
+home = "https://www.cssc.net.cn/"
+level = 1
+category = "军工"
+region = "全国"
+tier = "watch"
+note = "SSL 错误，需换 http 或栏目页"
+
+[[unit]]
+id = "csgc"
+name = "中国兵器装备集团有限公司"
+short = "兵器装备"
+home = "https://www.csgc.com.cn/"
+level = 1
+category = "军工"
+region = "全国"
+tier = "watch"
+
+[[unit]]
+id = "cec"
+name = "中国电子信息产业集团有限公司"
+short = "中国电子"
+home = "https://www.cec.com.cn/"
+level = 1
+category = "军工"
+region = "全国"
+tier = "watch"
+
+[[unit]]
+id = "aecc"
+name = "中国航空发动机集团有限公司"
+short = "中国航发"
+home = "https://www.aecc.cn/"
+level = 1
+category = "军工"
+region = "全国"
+tier = "watch"
+
+[[unit]]
+id = "ynu-career"
+name = "云南大学云就业平台"
+short = "云大就业"
+home = "http://jobs.ynu.edu.cn/"
+level = 3
+category = "校招汇总"
+region = "昆明"
+tier = "core"
+note = "校内招聘会/宣讲会汇总，按单位名归到具体企业"

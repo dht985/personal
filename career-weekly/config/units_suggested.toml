@@ -1,0 +1,12 @@
+# 自动发现的 L3 候选，请人工确认后再挪到 units.toml
+
+[[unit]]
+id = "cetc-54-l3-02dde6"
+name = "教育培训中心"
+level = 3
+parent = "cetc-54"
+category = "待确认"
+region = "待确认"
+tier = "reserve"
+home = "https://www.cti.ac.cn/Joinus/Education/"
+note = "自动发现，待人工确认"

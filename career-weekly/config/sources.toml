@@ -1,0 +1,195 @@
+# 只收录本次探测确认可访问的公开栏目
+
+[[source]]
+id = "cetc-news"
+unit = "cetc"
+name = "中国电科·新闻中心"
+url = "https://www.cetc.com.cn/zgdk/1592571/index.html"
+
+[[source]]
+id = "cetc-recruit"
+unit = "cetc"
+name = "中国电科·招聘及公告"
+url = "https://www.cetc.com.cn/zgdk/1593022/1592495/index.html"
+
+[[source]]
+id = "cti-news"
+unit = "cetc-54"
+name = "54所·新闻动态"
+url = "https://www.cti.ac.cn/News/news/"
+
+[[source]]
+id = "cti-notice"
+unit = "cetc-54"
+name = "54所·通知公告"
+url = "https://www.cti.ac.cn/News/tongzhigonggao/"
+
+[[source]]
+id = "norinco-news"
+unit = "norinco"
+name = "兵器工业集团·集团新闻"
+url = "http://www.norincogroup.com.cn/col/col84/index.html"
+
+[[source]]
+id = "csg-news"
+unit = "csg"
+name = "南方电网·新闻中心"
+url = "https://www.csg.cn/xwzx/"
+
+[[source]]
+id = "csg-notice"
+unit = "csg"
+name = "南方电网·企业公告"
+url = "https://www.csg.cn/xwzx/qygg/"
+
+[[source]]
+id = "chnenergy-news"
+unit = "chnenergy"
+name = "国家能源集团·综合新闻"
+url = "https://www.ceic.com/gjnyjtww/newCE0302/newlistcom.shtml"
+
+[[source]]
+id = "chnenergy-notice"
+unit = "chnenergy"
+name = "国家能源集团·公示公告"
+url = "https://www.ceic.com/gjnyjtww/newCE0706/newlistcom.shtml"
+
+# ---- 扩展：军工/能源央企观察层（官网首页可抓） ----
+
+[[source]]
+id = "chng-home"
+unit = "chng"
+name = "中国华能·官网"
+url = "https://www.chng.com.cn/"
+
+[[source]]
+id = "cdt-home"
+unit = "cdt"
+name = "中国大唐·官网"
+url = "https://www.china-cdt.com/"
+
+[[source]]
+id = "chd-home"
+unit = "chd"
+name = "中国华电·官网"
+url = "https://www.chd.com.cn/"
+
+[[source]]
+id = "spic-home"
+unit = "spic"
+name = "国家电投·官网"
+url = "https://www.spic.com.cn/"
+
+[[source]]
+id = "ctg-home"
+unit = "ctg"
+name = "中国三峡·官网"
+url = "https://www.ctg.com.cn/"
+
+[[source]]
+id = "cgn-home"
+unit = "cgn"
+name = "中广核·官网"
+url = "https://www.cgnpc.com.cn/"
+
+[[source]]
+id = "sinopec-home"
+unit = "sinopec"
+name = "中国石化·官网"
+url = "http://www.sinopecgroup.com/"
+
+[[source]]
+id = "pipechina-home"
+unit = "pipechina"
+name = "国家管网·官网"
+url = "https://www.pipechina.com.cn/"
+
+[[source]]
+id = "chinacoal-home"
+unit = "chinacoal"
+name = "中国中煤·官网"
+url = "https://www.chinacoal.com/"
+
+[[source]]
+id = "powerchina-home"
+unit = "powerchina"
+name = "中国电建·官网"
+url = "https://www.powerchina.cn/"
+
+[[source]]
+id = "ceec-home"
+unit = "ceec"
+name = "中国能建·官网"
+url = "https://www.ceec.net.cn/"
+
+[[source]]
+id = "avic-home"
+unit = "avic"
+name = "航空工业·官网"
+url = "https://www.avic.com/"
+
+[[source]]
+id = "csgc-home"
+unit = "csgc"
+name = "兵器装备·官网"
+url = "https://www.csgc.com.cn/"
+
+[[source]]
+id = "cec-home"
+unit = "cec"
+name = "中国电子·官网"
+url = "https://www.cec.com.cn/"
+
+[[source]]
+id = "aecc-home"
+unit = "aecc"
+name = "中国航发·官网"
+url = "https://www.aecc.cn/"
+
+# ---- 需要浏览器渲染的源 ----
+
+[[source]]
+id = "csg-digital-news"
+unit = "csg-digital"
+name = "南网数研院·公司新闻"
+url = "https://nwsyy.csg.cn/zx/"
+render = true
+
+[[source]]
+id = "cnooc-home"
+unit = "cnooc"
+name = "中国海油·官网"
+url = "https://www.cnooc.com.cn/"
+render = true
+
+[[source]]
+id = "ynu-jobs"
+unit = "ynu-career"
+name = "云南大学云就业平台"
+url = "http://jobs.ynu.edu.cn/"
+render = true
+
+[[source]]
+id = "manual-211"
+unit = "norinco-211"
+kind = "manual"
+name = "211所·人工维护"
+path = "manual/211.md"
+
+[[source]]
+id = "casc-news"
+unit = "casc"
+name = "航天科技·新闻中心"
+url = "http://www.spacechina.com/n25/n2014789/index.html"
+
+[[source]]
+id = "casic-home"
+unit = "casic"
+name = "航天科工·官网"
+url = "http://www.casic.com.cn/"
+
+[[source]]
+id = "cssc-home"
+unit = "cssc"
+name = "中国船舶·官网"
+url = "http://www.cssc.net.cn/"

@@ -1,0 +1,36 @@
+[app]
+name = "职业情报周报"
+timezone = "Asia/Shanghai"
+
+[paths]
+data = "data"
+raw = "data/raw"
+outbox = "outbox"
+db = "data/weekly.db"
+
+[http]
+user_agent = "CareerWeekly/0.1 (personal career intelligence; public sources only)"
+timeout_seconds = 20
+min_interval_seconds = 1.2
+max_retries = 3
+
+[report]
+# 4 页约 4000 中文字符，留出 Markdown 结构空间
+max_chars = 4200
+max_items = 12
+max_items_per_unit = 3
+
+[run]
+# 列表页可能含多年归档；只保留半年内的条目
+lookback_days = 365
+
+[llm]
+enabled = true
+endpoint = "http://127.0.0.1:11434/api/chat"
+model = "qwen3:8b"
+timeout_seconds = 120
+
+[notify]
+enabled = true
+# 生成后是否自动用浏览器打开周报
+open_report = false
