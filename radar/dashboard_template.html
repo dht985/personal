@@ -202,8 +202,9 @@ function card(r){
     </div>
     ${bar(r)}
     <dl class="kv">
-      <dt>报名截止</dt><dd>${esc(r.registration_last || "通知中未写明")}</dd>
+      <dt>最近截止</dt><dd>${esc(r.registration_next || r.registration_last || "正文/附件未抽取到")}</dd>
       <dt>层级状态</dt><dd>${esc(r.deadline_detail)}</dd>
+      <dt>日期来源</dt><dd>${esc(r.deadline_reliability || "未判定")}</dd>
       <dt>通知来源</dt><dd>${r.primary_url ? `<a href="${esc(r.primary_url)}" target="_blank" rel="noopener">${esc(r.primary_source||"链接")}</a>` : "—"}</dd>
     </dl>
     ${ev ? `<div class="ev">原文：「${esc(ev.slice(0,120))}」</div>` : ""}
@@ -231,7 +232,7 @@ function render(){
 
   rows.sort((a,b) =>
     sort === "name" ? a.name.localeCompare(b.name,"zh") :
-    sort === "deadline" ? (a.registration_last||"9999").localeCompare(b.registration_last||"9999") :
+    sort === "deadline" ? ((a.registration_next||a.registration_last)||"9999").localeCompare((b.registration_next||b.registration_last)||"9999") :
     (b.score_total - a.score_total));
 
   document.getElementById("grid").innerHTML = rows.map(card).join("");
@@ -254,16 +255,33 @@ function openDetail(key){
       </div></div>`).join("");
   const notices = r.notices.length ? `<ul class="plain">${r.notices.map(n =>
       `<li>${esc(n.source_name||"")} ｜ ${esc(n.title||"")} ${n.published_at?`（${esc(n.published_at)}）`:""}
-       <br><a href="${esc(n.url)}" target="_blank" rel="noopener">${esc(n.url)}</a></li>`).join("")}</ul>`
+       <br><a href="${esc(n.url)}" target="_blank" rel="noopener">${esc(n.url)}</a>
+       ${(n.attachments||[]).map(a=>`<br>附件：<a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.name||a.url)}</a>`).join("")}
+       ${(n.attachment_documents||[]).filter(a=>a.error).map(a=>`<div class="ev">附件未解析：${esc(a.name||a.url)} — ${esc(a.error)}</div>`).join("")}
+       </li>`).join("")}</ul>`
     : `<div class="empty">没有关联通知</div>`;
   const evs = r.registration_evidence.length
-    ? r.registration_evidence.map(e => `<div class="ev">原文：「${esc(e.evidence)}」</div>`).join("")
+    ? r.registration_evidence.map(e => `<div class="ev">
+        <span class="pill">${esc(e.role || "日期")}</span> ${esc(e.value || "")}
+        原文：「${esc(e.evidence)}」
+        ${e.source_url ? `<br><a href="${esc(e.source_url)}" target="_blank" rel="noopener">核验来源</a>` : ""}
+      </div>`).join("")
     : `<div class="empty">未从原文抽到报名时间</div>`;
+  const schedule = (r.schedule_evidence||[]).length
+    ? r.schedule_evidence.map(e => `<div class="ev">${esc(e.value||"")} 原文：「${esc(e.evidence||"")}」
+        ${e.source_url?`<br><a href="${esc(e.source_url)}" target="_blank" rel="noopener">核验来源</a>`:""}</div>`).join("")
+    : `<div class="empty">未从正文或附件抽到比赛阶段日期</div>`;
+  const submissions = (r.submission_evidence||[]).length
+    ? r.submission_evidence.map(e => `<div class="ev">${esc(e.value||"")} 原文：「${esc(e.evidence||"")}」</div>`).join("")
+    : `<div class="empty">没有单独识别到作品/材料提交截止日期</div>`;
   const ach = (r.achievements||[]).length
     ? `<ul class="plain">${r.achievements.map(a => `<li><a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.title)}</a>（${esc(a.published_at||"日期未知")}）</li>`).join("")}</ul>`
     : `<div class="empty">未检索到该校赛的获奖新闻</div>`;
   document.getElementById("m-body").innerHTML = `
     <h3>报名时间与原文依据</h3>${evs}
+    ${(r.registration_deadlines||[]).length > 1 ? `<div class="muted">识别到的全部截止日期：${r.registration_deadlines.map(esc).join("、")}</div>` : ""}
+    <h3 style="margin-top:18px">比赛阶段日程</h3>${schedule}
+    <h3 style="margin-top:18px">作品/材料提交截止</h3>${submissions}
     <h3 style="margin-top:18px">云大生态评估</h3>
     ${r.ynu_profile && r.ynu_profile.dimensions && r.ynu_profile.dimensions.length
       ? `<div class="muted">结论：<b>${esc(r.ynu_label)}</b>　

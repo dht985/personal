@@ -37,8 +37,14 @@ CREATE TABLE IF NOT EXISTS competitions (
     score_total        REAL,
     cs_fit             TEXT,
     deadline_status    TEXT,
+    deadline_reliability TEXT,
     registration_first TEXT,
     registration_last  TEXT,
+    registration_next  TEXT,
+    registration_deadlines TEXT,
+    registration_evidence TEXT,
+    submission_time_text TEXT,
+    schedule_evidence TEXT,
     fee_text           TEXT,
     team_text          TEXT,
     eligibility_text   TEXT,
@@ -66,6 +72,9 @@ CREATE TABLE IF NOT EXISTS notices (
     authority     TEXT,
     title         TEXT,
     published_at  TEXT,
+    body_excerpt  TEXT,
+    attachments_json TEXT,
+    extraction_errors TEXT,
     first_seen    TEXT NOT NULL,
     last_seen     TEXT NOT NULL
 );
@@ -128,6 +137,9 @@ TRACKED_FIELDS = [
     "tier",
     "registration_first",
     "registration_last",
+    "registration_next",
+    "deadline_reliability",
+    "submission_time_text",
     "fee_text",
     "team_text",
     "eligibility_text",
@@ -185,8 +197,25 @@ class Store:
             ("requirement_evidence", "ALTER TABLE competitions ADD COLUMN requirement_evidence TEXT"),
             ("visibility", "ALTER TABLE competitions ADD COLUMN visibility TEXT DEFAULT 'included'"),
             ("profile_checked_at", "ALTER TABLE competitions ADD COLUMN profile_checked_at TEXT"),
+            ("registration_next", "ALTER TABLE competitions ADD COLUMN registration_next TEXT"),
+            ("registration_deadlines", "ALTER TABLE competitions ADD COLUMN registration_deadlines TEXT"),
+            ("registration_evidence", "ALTER TABLE competitions ADD COLUMN registration_evidence TEXT"),
+            ("submission_time_text", "ALTER TABLE competitions ADD COLUMN submission_time_text TEXT"),
+            ("schedule_evidence", "ALTER TABLE competitions ADD COLUMN schedule_evidence TEXT"),
+            ("deadline_reliability", "ALTER TABLE competitions ADD COLUMN deadline_reliability TEXT"),
         ):
             if column not in comp_cols:
+                self.conn.execute(ddl)
+
+        notice_cols = {
+            row["name"] for row in self.conn.execute("PRAGMA table_info(notices)")
+        }
+        for column, ddl in (
+            ("body_excerpt", "ALTER TABLE notices ADD COLUMN body_excerpt TEXT"),
+            ("attachments_json", "ALTER TABLE notices ADD COLUMN attachments_json TEXT"),
+            ("extraction_errors", "ALTER TABLE notices ADD COLUMN extraction_errors TEXT"),
+        ):
+            if column not in notice_cols:
                 self.conn.execute(ddl)
 
     # ---- run lifecycle ------------------------------------------------
@@ -247,8 +276,22 @@ class Store:
             "score_total": rec.get("score_total"),
             "cs_fit": rec.get("cs_fit"),
             "deadline_status": rec.get("deadline_status"),
+            "deadline_reliability": rec.get("deadline_reliability"),
             "registration_first": rec.get("registration_first"),
             "registration_last": rec.get("registration_last"),
+            "registration_next": rec.get("registration_next"),
+            "registration_deadlines": json.dumps(
+                rec.get("registration_deadlines") or [], ensure_ascii=False
+            ),
+            "registration_evidence": json.dumps(
+                rec.get("registration_evidence") or [], ensure_ascii=False
+            ),
+            "submission_time_text": rec.get("submission_time_text"),
+            "schedule_evidence": json.dumps(
+                (rec.get("contest_time_evidence") or [])
+                + (rec.get("submission_evidence") or []),
+                ensure_ascii=False,
+            ),
             "fee_text": rec.get("fee_text"),
             "team_text": rec.get("team_text"),
             "eligibility_text": rec.get("eligibility_text"),
@@ -290,19 +333,34 @@ class Store:
         if row is None:
             cur = self.conn.execute(
                 """INSERT INTO notices (url, url_key, source_id, source_name, authority, title,
-                                        published_at, first_seen, last_seen)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                        published_at, body_excerpt, attachments_json,
+                                        extraction_errors, first_seen, last_seen)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     notice["url"], key, notice.get("source_id"), notice.get("source_name"),
                     notice.get("authority"), notice.get("title"), notice.get("published_at"),
+                    notice.get("body_excerpt"),
+                    json.dumps(notice.get("attachments") or [], ensure_ascii=False),
+                    json.dumps(notice.get("extraction_errors") or [], ensure_ascii=False),
                     _now(), _now(),
                 ),
             )
             self.conn.commit()
             return int(cur.lastrowid)
         self.conn.execute(
-            "UPDATE notices SET last_seen = ?, title = COALESCE(?, title) WHERE id = ?",
-            (_now(), notice.get("title"), row["id"]),
+            """UPDATE notices SET last_seen = ?, title = COALESCE(?, title),
+               published_at = COALESCE(?, published_at),
+               body_excerpt = COALESCE(?, body_excerpt),
+               attachments_json = COALESCE(?, attachments_json),
+               extraction_errors = COALESCE(?, extraction_errors)
+               WHERE id = ?""",
+            (
+                _now(), notice.get("title"), notice.get("published_at"),
+                notice.get("body_excerpt"),
+                json.dumps(notice.get("attachments") or [], ensure_ascii=False),
+                json.dumps(notice.get("extraction_errors") or [], ensure_ascii=False),
+                row["id"],
+            ),
         )
         self.conn.commit()
         return int(row["id"])

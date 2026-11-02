@@ -10,6 +10,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
+from urllib.parse import urlsplit
 
 from .config import Config
 
@@ -128,17 +129,38 @@ def _deadline_status(record: dict, cfg: Config) -> tuple[str, str]:
     """返回 (时效状态, 说明)。"""
     th = cfg.scoring["thresholds"]
     today = date.today()
-    last = _parse_date(record.get("registration_last"))
+    action = _parse_date(record.get("registration_next"))
+    last = action or _parse_date(record.get("registration_last"))
     if last is None:
-        return "未找到日期", "通知中未抽取到明确的报名截止日期"
+        return "未找到日期", "正文与可读附件中未抽取到明确的报名截止日期"
     days = (last - today).days
+    extra = ""
+    deadlines = record.get("registration_deadlines") or []
+    if len(deadlines) > 1:
+        extra = f"；共识别 {len(deadlines)} 个批次/赛道截止日期"
     if days < 0:
-        return "已截止", f"报名截止 {last.isoformat()}（已过期 {-days} 天）"
+        return "已截止", f"报名截止 {last.isoformat()}（已过期 {-days} 天）{extra}"
     if days <= th["deadline_soon_days"]:
-        return "30天内截止", f"报名截止 {last.isoformat()}，还剩 {days} 天"
+        return "30天内截止", f"报名截止 {last.isoformat()}，还剩 {days} 天{extra}"
     if days <= th["deadline_near_days"]:
-        return "90天内截止", f"报名截止 {last.isoformat()}，还剩 {days} 天"
-    return "报名开放", f"报名截止 {last.isoformat()}，还剩 {days} 天"
+        return "90天内截止", f"报名截止 {last.isoformat()}，还剩 {days} 天{extra}"
+    return "报名开放", f"报名截止 {last.isoformat()}，还剩 {days} 天{extra}"
+
+
+def _deadline_reliability(record: dict) -> str:
+    urls = {
+        item.get("source_url", "")
+        for item in record.get("registration_evidence", [])
+        if item.get("source_url")
+    }
+    hosts = {urlsplit(url).netloc.lower() for url in urls}
+    if any(host == "ynu.edu.cn" or host.endswith(".ynu.edu.cn") for host in hosts):
+        return "云大官方"
+    if any(host.endswith(".edu.cn") or host.endswith(".gov.cn") for host in hosts):
+        return "外校/其他机构通知"
+    if urls:
+        return "其他公开页面"
+    return "无日期"
 
 
 def _acceptance_dimension(
@@ -312,6 +334,9 @@ def evaluate(
     )
 
     status, status_detail = _deadline_status(record, cfg)
+    date_reliability = _deadline_reliability(record)
+    if status != "未找到日期" and date_reliability != "云大官方":
+        status_detail += f"；日期来源：{date_reliability}，需核对云大或赛事官方入口"
     dimensions.append(
         Dimension(
             key="timeliness",
@@ -351,7 +376,8 @@ def evaluate(
 
     # ---- 风险与行动 --------------------------------------------------
     if status == "未找到日期":
-        risks.append("通知中未抽取到明确报名截止日期，需打开原文人工确认")
+        risks.append("正文与可读附件未抽取到明确报名截止日期，需打开原文或官方入口人工确认")
+        actions.append("打开通知附件与官方报名入口，核对报名截止日期")
     if status == "30天内截止":
         actions.append(f"尽快报名：{status_detail}")
     fee = record.get("fee_text")
@@ -383,6 +409,7 @@ def evaluate(
     elif (
         fit == "核心"
         and status == "30天内截止"
+        and date_reliability == "云大官方"
         and total >= rules["focus_actionable_min_score"]
     ):
         tier = "重点关注"
@@ -410,6 +437,7 @@ def evaluate(
     record["cs_fit"] = fit
     record["deadline_status"] = status
     record["deadline_detail"] = status_detail
+    record["deadline_reliability"] = date_reliability
     return record
 
 

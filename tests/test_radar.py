@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import io
 import sys
 import unittest
 from pathlib import Path
@@ -14,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from radar.catalog import Catalog  # noqa: E402
+from radar.attachments import extract_attachment  # noqa: E402
 from radar.config import load_config  # noqa: E402
 from radar.evaluate import evaluate  # noqa: E402
 from radar.extract import extract_fields, guess_competition_name, summarize_dates  # noqa: E402
@@ -52,6 +54,12 @@ class TestTextUtil(unittest.TestCase):
         dates = [d["value"] for d in find_dates("报名截止时间为2026年10月30日24:00")]
         self.assertIn("2026-10-30", dates)
 
+    def test_month_followed_by_numbered_item_is_not_a_day(self):
+        dates = [d["value"] for d in find_dates(
+            "颁奖典礼：2026年11月2.大数据挑战赛报名另行通知"
+        )]
+        self.assertNotIn("2026-11-02", dates)
+
     def test_normalize_name(self):
         self.assertEqual(normalize_name("2026年全国大学生软件测试大赛"),
                          normalize_name("全国大学生软件测试大赛"))
@@ -81,6 +89,96 @@ class TestExtract(unittest.TestCase):
         out = extract_fields("x", "报名方式：将报名表发送至 test@example.com", "u",
                              published_at="2026-03-01")
         self.assertEqual(summarize_dates(out)["registration_last"], None)
+
+    def test_registration_deadline_is_not_submission_deadline(self):
+        text = (
+            "三、报名时间 即日起至2026年06月15日。"
+            "六、比赛时间 第一阶段：2026年5月18日报名开始，"
+            "2026年6月15日报名截止；"
+            "初赛阶段作品线上提交的截止时间为7月15日中午12:00。"
+        )
+        out = extract_fields("计算机系统能力大赛", text, "https://example.edu.cn/a",
+                             published_at="2026-05-01")
+        deadline = summarize_dates(out)
+        self.assertEqual(deadline["registration_last"], "2026-06-15")
+        self.assertEqual(out["submission"][0]["value"], "2026-07-15")
+
+    def test_submission_deadline_stops_before_later_stage(self):
+        text = (
+            "报名时间：2026年3月18日—5月28日。"
+            "初赛作品提交截止：2026年6月30日。"
+            "决赛入围名单公布：2026年7月12日。"
+        )
+        out = extract_fields("系统能力大赛", text, "u", published_at="2026-03-01")
+        self.assertEqual(summarize_dates(out)["registration_last"], "2026-05-28")
+        self.assertEqual([x["value"] for x in out["submission"]], ["2026-06-30"])
+
+    def test_registration_date_range_with_separate_clause(self):
+        text = "报名将于2025年11月20日正式开启，截止日期为2026年3月22日。"
+        out = extract_fields("天梯赛", text, "u", published_at="2026-03-05")
+        self.assertEqual(summarize_dates(out)["registration_last"], "2026-03-22")
+
+    def test_schedule_dates_are_not_registration_dates(self):
+        text = (
+            "四、日程安排（一）初赛：第一场2026年8月23日，"
+            "第二场2026年9月19日。（二）总决赛颁奖：2026年11月2."
+            "大数据挑战赛报名截止时间：2026年6月26日前。"
+        )
+        out = extract_fields("百度之星程序设计大赛", text, "https://example.edu.cn/a",
+                             published_at="2026-07-18")
+        deadline = summarize_dates(out)
+        self.assertEqual(deadline["registration_last"], "2026-06-26")
+        contest_dates = {item["value"] for item in out["contest_time"]}
+        self.assertIn("2026-08-23", contest_dates)
+        self.assertIn("2026-09-19", contest_dates)
+        self.assertNotIn("2026-11-02", contest_dates)
+
+
+class _BytesFetcher:
+    def __init__(self, content, filename):
+        self.content = content
+        self.filename = filename
+
+    def fetch_bytes(self, url, referer=None, max_bytes=None):
+        return self.content, self.filename
+
+
+class TestAttachments(unittest.TestCase):
+    def test_xlsx_table_text(self):
+        from openpyxl import Workbook
+
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["赛道", "报名截止"])
+        ws.append(["软件赛", "2026-03-20"])
+        buf = io.BytesIO()
+        wb.save(buf)
+        out = extract_attachment(
+            _BytesFetcher(buf.getvalue(), "报名表.xlsx"),
+            "https://example.edu.cn/a.xlsx", "报名表.xlsx",
+        )
+        self.assertEqual(out["kind"], "xlsx")
+        self.assertIn("软件赛", out["text"])
+        self.assertIn("2026-03-20", out["text"])
+
+    def test_docx_table_text(self):
+        from docx import Document
+
+        doc = Document()
+        table = doc.add_table(rows=2, cols=2)
+        table.cell(0, 0).text = "赛道"
+        table.cell(0, 1).text = "比赛日期"
+        table.cell(1, 0).text = "程序设计"
+        table.cell(1, 1).text = "2026-04-18"
+        buf = io.BytesIO()
+        doc.save(buf)
+        out = extract_attachment(
+            _BytesFetcher(buf.getvalue(), "竞赛通知.docx"),
+            "https://example.edu.cn/a.docx", "竞赛通知.docx",
+        )
+        self.assertEqual(out["kind"], "docx")
+        self.assertIn("程序设计", out["text"])
+        self.assertIn("2026-04-18", out["text"])
 
 
 class TestCatalog(unittest.TestCase):
@@ -189,7 +287,13 @@ class TestEvaluate(unittest.TestCase):
 
         soon = (date.today() + timedelta(days=10)).isoformat()
         rec = evaluate(
-            self._record(catalog_category="四类", catalog_no=100, registration_last=soon),
+            self._record(
+                catalog_category="四类", catalog_no=100, registration_last=soon,
+                registration_evidence=[{
+                    "value": soon, "role": "deadline", "evidence": "报名截止",
+                    "source_url": "https://jwc.ynu.edu.cn/info/1009/1.htm",
+                }],
+            ),
             self.cfg, self.meta, history_years=2, szcp={
                 "meta": {"document_no": "云大学〔2020〕2号", "sources": []},
                 "competition_bonus": {"verified_conclusion": "x", "open_question": "y"},
@@ -197,6 +301,45 @@ class TestEvaluate(unittest.TestCase):
         )
         self.assertEqual(rec["deadline_status"], "30天内截止")
         self.assertEqual(rec["tier"], "重点关注")
+
+    def test_nearest_active_track_deadline_drives_status(self):
+        from datetime import date, timedelta
+
+        near = (date.today() + timedelta(days=8)).isoformat()
+        far = (date.today() + timedelta(days=60)).isoformat()
+        rec = evaluate(
+            self._record(
+                catalog_category="三类", catalog_no=69,
+                registration_next=near, registration_last=far,
+                registration_deadlines=[near, far],
+            ),
+            self.cfg, self.meta, history_years=1,
+        )
+        self.assertEqual(rec["deadline_status"], "30天内截止")
+        self.assertIn("2 个批次/赛道", rec["deadline_detail"])
+
+    def test_external_school_deadline_is_not_actionable(self):
+        from datetime import date, timedelta
+
+        near = (date.today() + timedelta(days=8)).isoformat()
+        rec = evaluate(
+            self._record(
+                catalog_category="三类", catalog_no=69,
+                registration_next=near, registration_last=near,
+                registration_deadlines=[near],
+                registration_evidence=[{
+                    "value": near,
+                    "role": "deadline",
+                    "evidence": "某校外校报名截止",
+                    "source_url": "https://other.edu.cn/notice.htm",
+                }],
+            ),
+            self.cfg, self.meta, history_years=1,
+        )
+        self.assertEqual(rec["deadline_status"], "30天内截止")
+        self.assertEqual(rec["deadline_reliability"], "外校/其他机构通知")
+        self.assertNotEqual(rec["tier"], "重点关注")
+        self.assertIn("需核对", rec["deadline_detail"])
 
     def test_no_date_keeps_out_of_focus(self):
         """三类赛事但没有拿到任何报名时间时，不应冒充"重点关注"。"""

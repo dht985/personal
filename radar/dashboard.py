@@ -55,8 +55,13 @@ def build_payload(
                 "cs_fit": r.get("cs_fit"),
                 "deadline_status": r.get("deadline_status"),
                 "deadline_detail": r.get("deadline_detail"),
+                "deadline_reliability": r.get("deadline_reliability"),
                 "registration_first": r.get("registration_first"),
                 "registration_last": r.get("registration_last"),
+                "registration_next": r.get("registration_next"),
+                "registration_deadlines": r.get("registration_deadlines", []),
+                "submission_time_text": r.get("submission_time_text"),
+                "contest_time_text": r.get("contest_time_text"),
                 "tier_reason": r.get("tier_reason", ""),
                 "szcp_estimate": r.get("szcp_estimate"),
                 "ynu_verdict": (r.get("ynu_profile") or {}).get("verdict"),
@@ -76,10 +81,15 @@ def build_payload(
                         "url": n.get("url"),
                         "source_name": n.get("source_name"),
                         "published_at": n.get("published_at") or n.get("list_date"),
+                        "attachments": n.get("attachments", []),
+                        "attachment_documents": n.get("attachment_documents", []),
+                        "extraction_errors": n.get("extraction_errors", []),
                     }
                     for n in r.get("notices", [])
                 ],
-                "registration_evidence": r.get("registration_evidence", [])[:3],
+                "registration_evidence": r.get("registration_evidence", [])[:8],
+                "schedule_evidence": (r.get("contest_time_evidence") or [])[:8],
+                "submission_evidence": (r.get("submission_evidence") or [])[:5],
                 "achievements": r.get("achievements", []),
                 "official_links": r.get("official_links", [])[:5],
                 "first_seen": (r.get("first_seen") or "")[:19],
@@ -133,7 +143,8 @@ def build_payload(
             "本项上限 5 分；卡片上的数值是「国家级一等奖 + 团队排名第一」的上限情形。",
             "认定目录已更新为《学校认定本科生学科竞赛目录（2026版）》；"
             "列入 2025 版但未列入 2026 版的竞赛按细则降一级计算。",
-            "所有日期均来自通知原文抽取并附原文片段；抽不到时明确标注，未做推测。",
+            "日期会从正文及可读 PDF/Word/Excel 附件抽取并附原文片段；"
+            "附件无文本层或读取失败时会明确标注，未做推测。",
             "学生评价维度只在有可靠公开来源时才呈现，否则写「未找到足够可靠的公开评价」。",
         ],
     }

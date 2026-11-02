@@ -17,6 +17,7 @@ class Evidence:
     value: str
     evidence: str
     method: str
+    role: str | None = None
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -116,19 +117,45 @@ def _collect(
 
 
 REGISTRATION_PATTERNS = [
-    ("reg_deadline", r"(?:报名|网上报名|预报名)?[^。；;]{0,8}?(?:截止|截至)(?:时间|日期)?[^。；;]{0,4}?[:：为]?\s*(?P<seg>[^。；;\n]{0,60})"),
-    ("reg_window", r"(?:报名|参赛报名)(?:时间|日期|期限)[^。；;]{0,4}?[:：为]\s*(?P<seg>[^。；;\n]{0,60})"),
-    ("reg_colon", r"报名[^。；;\n]{0,15}?[:：]\s*(?P<seg>[^。；;\n]{0,60})"),
+    (
+        "reg_deadline",
+        r"(?:报名|网上报名|预报名)"
+        r"(?:(?!初赛|复赛|决赛|作品|提交|入围|名单|答辩|颁奖)[^。；;]){0,50}?"
+        r"(?:截止|截至)(?:时间|日期)?[^。；;]{0,4}?[:：为]?\s*"
+        r"(?P<seg>[^。；;\n]{0,45})",
+    ),
+    (
+        "reg_window",
+        r"(?:报名|参赛报名)(?:时间|日期|期限)[^。；;]{0,4}?[:：为]\s*"
+        r"(?P<seg>(?:(?!初赛|复赛|决赛|作品|提交|入围|名单|答辩|颁奖)[^。；;\n]){0,45})",
+    ),
+    (
+        "reg_colon",
+        r"报名[^。；;\n]{0,15}?[:：]\s*"
+        r"(?P<seg>(?:(?!初赛|复赛|决赛|作品|提交|入围|名单|答辩|颁奖)[^。；;\n]){0,45})",
+    ),
     ("reg_from_now", r"即日起至(?P<seg>[^。；;\n]{0,40})"),
-    ("reg_before", r"(?:于|在)(?P<seg>[^。；;\n]{0,30}?)前[^。；;\n]{0,10}?(?:报名|提交|报送|注册|完成报名)"),
-    ("reg_deadline2", r"(?:报名)?截止日期(?:为|是)?[:：]?\s*(?P<seg>[^。；;\n]{0,40})"),
-    ("submit_deadline", r"(?:提交|报送|上传)[^。；;]{0,6}?(?:截止|截至)(?:时间|日期)?[^。；;]{0,4}?[:：为]?\s*(?P<seg>[^。；;\n]{0,50})"),
+    ("reg_before", r"(?:于|在)(?P<seg>[^。；;\n]{0,30}?)前[^。；;\n]{0,10}?(?:报名|注册|完成报名)"),
+    ("reg_deadline2", r"报名截止日期(?:为|是)?[:：]?\s*(?P<seg>[^。；;\n]{0,40})"),
 ]
 
 CONTEST_TIME_PATTERNS = [
-    ("contest_time", r"(?:竞赛|比赛|大赛|赛事|决赛|初赛|省赛|国赛)[^。；;]{0,6}?时间[^。；;]{0,4}?[:：为]\s*(?P<seg>[^。；;\n]{0,60})"),
     ("contest_hold", r"(?:拟)?(?:于|在)\s*(?P<seg>[^。；;\n]{0,30}?)(?:举行|举办|进行)"),
     ("stage_time", r"(?P<seg>(?:校赛|校内选拔赛|省级|省赛|国赛|全国总决赛|决赛)[^。；;\n]{0,20}?)(?:时间|安排)[^。；;]{0,4}?[:：为]\s*(?P<seg2>[^。；;\n]{0,40})"),
+    ("stage_date", r"(?P<seg>(?:第[一二三四五六七八九十\d]+场|初赛|复赛|决赛|校赛|省赛|国赛|全国总决赛|比赛|竞赛)[^。；;，,\n]{0,36})"),
+]
+
+STAGE_CONTEXT_RE = re.compile(
+    r"比赛|竞赛|初赛|复赛|决赛|签到|热身|开幕|闭幕|颁奖|省赛|国赛|校赛|总决赛|举行|举办"
+)
+
+SUBMISSION_PATTERNS = [
+    (
+        "submit_deadline",
+        r"(?:作品|材料|成果|参赛作品)[^。；;]{0,8}?(?:提交|报送|上传)"
+        r"[^。；;]{0,8}?(?:截止|截至)(?:时间|日期)?[^。；;]{0,4}?[:：为]?\s*"
+        r"(?P<seg>(?:(?!决赛|公布|答辩|颁奖|入围)[^。；;\n]){0,50})",
+    ),
 ]
 
 FEE_PATTERNS = [
@@ -165,6 +192,9 @@ def extract_fields(
 ) -> dict:
     """抽取一条通知的结构化信息；所有字段均为 Evidence 列表。"""
     text = (title or "") + "\n" + (body or "")
+    # 网页中的 "2026年11月2.大数据挑战赛" 是"11月"后接第2个小节，
+    # 不是11月2日。把日期/数字后紧跟中文的英文点恢复为句界。
+    text = re.sub(r"\.(?=[\u4e00-\u9fff])", "。", text)
     base_year = None
     if published_at:
         m = re.match(r"(20\d{2})", published_at)
@@ -175,6 +205,7 @@ def extract_fields(
     result: dict[str, list[dict]] = {}
     groups = {
         "registration": REGISTRATION_PATTERNS,
+        "submission": SUBMISSION_PATTERNS,
         "contest_time": CONTEST_TIME_PATTERNS,
         "fee": FEE_PATTERNS,
         "team": TEAM_PATTERNS,
@@ -182,12 +213,55 @@ def extract_fields(
         "organizer": ORGANIZER_PATTERNS,
     }
     # 时间类字段必须抽出真实日期，抽不到就留空，避免把"报名方式：xxx"当成时间
-    date_required = {"registration", "contest_time"}
+    date_required = {"registration", "submission", "contest_time"}
     for field, patterns in groups.items():
         items = _collect(
             text, patterns, field, base_year=base_year, require_date=field in date_required
         )
         result[field] = [e.as_dict() for e in items]
+
+    # 日程按日期上下文逐条识别，避免一个长段落只保留第一个日期。
+    schedule_seen = {item["value"] for item in result["contest_time"]}
+    for item in find_dates(text, base_year):
+        before = text[max(0, item["start"] - 60):item["start"]]
+        after = text[item["end"]:item["end"] + 60]
+        context = before + text[item["start"]:item["end"]] + after
+        if not STAGE_CONTEXT_RE.search(context):
+            continue
+        if re.search(r"报名|注册|截止|截至", before[-60:]):
+            continue
+        if item["value"] in schedule_seen:
+            continue
+        schedule_seen.add(item["value"])
+        result["contest_time"].append(
+            Evidence(
+                field="contest_time",
+                value=item["value"],
+                evidence=snippet_around(text, item["start"], item["end"], 55),
+                method="date-context:stage",
+            ).as_dict()
+        )
+
+    # 报名日期按语义分组：同一证据内多个日期视为起止，单日期按 method 判断。
+    grouped: dict[tuple[str, str], list[dict]] = {}
+    for item in result["registration"]:
+        key = (item["method"], item["evidence"])
+        grouped.setdefault(key, []).append(item)
+    for (method, _evidence), items in grouped.items():
+        dates = sorted(items, key=lambda item: item["value"])
+        if method.endswith(
+            ("reg_deadline", "reg_deadline2", "reg_before", "reg_from_now")
+        ):
+            for item in dates:
+                item["role"] = "deadline"
+        elif len(dates) >= 2 and method.endswith(("reg_window", "reg_colon", "reg_from_now")):
+            dates[0]["role"] = "open"
+            dates[-1]["role"] = "deadline"
+        elif len(dates) == 1 and re.search(r"截至|截止|前", _evidence):
+            dates[0]["role"] = "deadline"
+        else:
+            for item in dates:
+                item.setdefault("role", "unclassified")
 
     # 正文里出现的所有日期，作为兜底时间线索（不指定语义）
     result["dates_all"] = [d["value"] for d in find_dates(text, base_year)][:20]
@@ -200,9 +274,24 @@ def extract_fields(
 def summarize_dates(extracted: dict) -> dict:
     """把抽取结果压成便于排序/提醒的摘要字段。"""
     reg = extracted.get("registration", [])
-    reg_dates = sorted({e["value"] for e in reg if re.match(r"20\d{2}-\d{2}-\d{2}", e["value"])})
+    reg_dates = sorted({
+        e["value"] for e in reg if re.match(r"20\d{2}-\d{2}-\d{2}", e["value"])
+    })
+    open_dates = sorted({
+        e["value"] for e in reg
+        if e.get("role") == "open" and re.match(r"20\d{2}-\d{2}-\d{2}", e["value"])
+    })
+    deadlines = sorted({
+        e["value"] for e in reg
+        if e.get("role") == "deadline" and re.match(r"20\d{2}-\d{2}-\d{2}", e["value"])
+    })
+    from datetime import date
+
+    future_deadlines = [d for d in deadlines if d >= date.today().isoformat()]
     return {
-        "registration_first": reg_dates[0] if reg_dates else None,
-        "registration_last": reg_dates[-1] if reg_dates else None,
+        "registration_first": (open_dates or reg_dates or [None])[0],
+        "registration_last": (deadlines or reg_dates or [None])[-1],
+        "registration_next": future_deadlines[0] if future_deadlines else None,
+        "registration_deadlines": deadlines,
         "registration_raw": [e["evidence"] for e in reg][:3],
     }

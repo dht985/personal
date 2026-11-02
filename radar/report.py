@@ -65,7 +65,10 @@ def _evidence_lines(items: list[dict], limit: int = 2) -> list[str]:
     for ev in items[:limit]:
         snippet = _cell(ev.get("evidence", ""), 90)
         if snippet:
-            out.append(f"  - 原文：「{snippet}」")
+            role = f"（{ev['role']}）" if ev.get("role") else ""
+            value = f" {ev['value']}" if ev.get("value") else ""
+            source = f" 来源：{ev['source_url']}" if ev.get("source_url") else ""
+            out.append(f"  - {role}{value} 原文：「{snippet}」{source}")
     return out
 
 
@@ -88,6 +91,7 @@ def render_card(record: dict, catalog_meta: dict) -> str:
             f"（需人工确认是否属于认定范围）")
     add(f"- 与计算机专业适配度：{record.get('cs_fit')}")
     add(f"- 有效期状态：{record.get('deadline_detail')}")
+    add(f"- 日期来源可信度：{record.get('deadline_reliability', '未判定')}")
     profile = record.get("ynu_profile") or {}
     if profile:
         dims = {d["key"]: d for d in profile.get("dimensions", [])}
@@ -116,6 +120,11 @@ def render_card(record: dict, catalog_meta: dict) -> str:
     add("## 二、时间与报名")
     add(f"- 报名时间（抽取值）：{record.get('registration_first') or '—'} ~ "
         f"{record.get('registration_last') or '—'}")
+    if record.get("registration_next"):
+        add(f"- 最近仍需行动的截止日期：**{record['registration_next']}**")
+    deadlines = record.get("registration_deadlines") or []
+    if len(deadlines) > 1:
+        add(f"- 识别到的全部报名/批次截止：{', '.join(deadlines)}")
     ev = _evidence_lines(record.get("registration_evidence", []))
     if ev:
         add("- 报名时间原文依据：")
@@ -124,6 +133,13 @@ def render_card(record: dict, catalog_meta: dict) -> str:
         add(f"- 报名时间原文依据：{NOT_FOUND}")
     if record.get("contest_time_text"):
         add(f"- 竞赛/阶段时间：{record['contest_time_text']}")
+    schedule = record.get("contest_time_evidence") or []
+    if schedule:
+        add("- 阶段日程原文依据：")
+        lines.extend(_evidence_lines(schedule, limit=6))
+    if record.get("submission_time_text"):
+        add(f"- 作品/材料提交截止：{record['submission_time_text']}")
+        lines.extend(_evidence_lines(record.get("submission_evidence") or [], limit=3))
     add("")
 
     add("## 三、官方入口")
@@ -134,6 +150,13 @@ def render_card(record: dict, catalog_meta: dict) -> str:
             add(f"- 相关链接：{link}")
     else:
         add(f"- 赛事官网/报名入口：{NOT_FOUND}")
+    attachments = []
+    for notice in record.get("notices") or []:
+        attachments.extend(notice.get("attachments") or [])
+    if attachments:
+        add("- 通知附件：")
+        for attachment in attachments[:6]:
+            add(f"  - [{attachment.get('name') or '附件'}]({attachment.get('url')})")
     add("")
 
     add("## 四、往届情况与学生评价")
@@ -264,6 +287,16 @@ def render_digest(
     add(f"- 官方栏目通知：抓取 {stats.get('official_notices', 0)} 条，"
         f"其中计算机相关 {stats.get('cs_notices', 0)} 条")
     add(f"- 详情页核验：{stats.get('detail_fetched', 0)} 条")
+    add(
+        f"- 附件核验：解析文本 {stats.get('attachment_text_parsed', 0)}/"
+        f"{stats.get('attachment_documents', 0)} 个"
+        f"，不可读/不支持 {stats.get('attachment_errors', 0)} 个"
+    )
+    if stats.get("date_gap_queries"):
+        add(
+            f"- 日期定向补查：{stats.get('date_gap_resolved', 0)}/"
+            f"{stats.get('date_gap_queries', 0)} 个目录赛事补到日期"
+        )
     engines = stats.get("discovery_engines") or {}
     engine_text = "、".join(f"{k}×{v}" for k, v in engines.items()) or "未使用"
     add(f"- 主动发现检索：{stats.get('discovery_hits', 0)} 条命中，"

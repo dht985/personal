@@ -22,7 +22,7 @@ from .textutil import clean_text, normalize_name
 
 YNU_SUFFIXES = ("ynu.edu.cn",)
 # 评估逻辑变化时递增，旧缓存会自动失效重算
-PROFILE_VERSION = 8
+PROFILE_VERSION = 9
 COMMUNITY_HOSTS = (
     "zhihu.com", "tieba.baidu.com", "csdn.net", "jianshu.com", "douban.com",
     "xiaohongshu.com", "bilibili.com", "weibo.com", "mp.weixin.qq.com",
@@ -273,6 +273,7 @@ def assess(
     do_search: bool = True,
     cached: dict | None = None,
     engine_ok: bool = True,
+    definitive_negative: bool = False,
 ) -> Profile:
     name = record["name"]
     in_catalog = catalog_entry is not None
@@ -386,9 +387,15 @@ def assess(
     elif not search_ok:
         verdict = "inconclusive"
         notes.append("定向检索未正常返回，无法下结论，仍纳入观察")
-    else:
+    elif definitive_negative:
         verdict = "insufficient"
-        notes.append("三个维度均未找到任何校内线索，且不在认定目录中")
+        notes.append("存在明确否定证据，判定校内支撑不足")
+    else:
+        verdict = "inconclusive"
+        notes.append(
+            "未找到校内线索，但搜索引擎结果并非穷尽证据；"
+            "按「证据不充分」继续纳入，避免误杀"
+        )
 
     return Profile(
         verdict=verdict,

@@ -149,22 +149,49 @@ class TestMigrationAndRetry(unittest.TestCase):
         for column in (
             "ynu_verdict", "ynu_evidence", "mentor_dependency", "difficulty",
             "requirement_evidence", "visibility", "profile_checked_at",
+            "registration_next", "registration_deadlines", "registration_evidence",
+            "submission_time_text", "schedule_evidence", "deadline_reliability",
         ):
             con.execute(f"ALTER TABLE competitions DROP COLUMN {column}")
         for column in ("attempts", "last_error"):
             con.execute(f"ALTER TABLE push_log DROP COLUMN {column}")
+        for column in ("body_excerpt", "attachments_json", "extraction_errors"):
+            con.execute(f"ALTER TABLE notices DROP COLUMN {column}")
         con.commit()
         con.close()
 
         reopened = Store(self.path)
         comp_cols = {r["name"] for r in reopened.conn.execute("PRAGMA table_info(competitions)")}
         push_cols = {r["name"] for r in reopened.conn.execute("PRAGMA table_info(push_log)")}
+        notice_cols = {r["name"] for r in reopened.conn.execute("PRAGMA table_info(notices)")}
         self.assertIn("ynu_verdict", comp_cols)
         self.assertIn("profile_checked_at", comp_cols)
+        self.assertIn("registration_next", comp_cols)
+        self.assertIn("registration_evidence", comp_cols)
+        self.assertIn("deadline_reliability", comp_cols)
         self.assertIn("attempts", push_cols)
+        self.assertIn("body_excerpt", notice_cols)
         row = reopened.conn.execute("SELECT name FROM competitions").fetchone()
         self.assertEqual(row["name"], "旧赛事")
         reopened.close()
+
+    def test_notice_evidence_persisted(self):
+        store = Store(self.path)
+        notice_id = store.upsert_notice({
+            "url": "https://example.edu.cn/a.htm",
+            "title": "附件测试",
+            "published_at": "2026-03-01",
+            "body_excerpt": "报名截止时间为2026年3月20日",
+            "attachments": [{"name": "简章.pdf", "url": "https://example.edu.cn/a.pdf"}],
+            "extraction_errors": ["扫描件无文本层"],
+        })
+        row = store.conn.execute(
+            "SELECT * FROM notices WHERE id = ?", (notice_id,)
+        ).fetchone()
+        self.assertIn("2026年3月20日", row["body_excerpt"])
+        self.assertIn("简章.pdf", row["attachments_json"])
+        self.assertIn("扫描件", row["extraction_errors"])
+        store.close()
 
     def test_failed_push_stays_pending_and_retries(self):
         store = Store(self.path)

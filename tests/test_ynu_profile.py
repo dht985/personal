@@ -60,12 +60,21 @@ class TestVerdict(unittest.TestCase):
         self.assertEqual(profile.verdict, "sufficient")
         self.assertTrue(profile.in_catalog)
 
-    def test_no_evidence_outside_catalog_is_insufficient(self):
+    def test_no_evidence_outside_catalog_is_inconclusive(self):
         record = _record("某个不知名杯赛", notices=[
             {"title": "赛事启动", "url": "https://example.com/a.htm",
              "body_excerpt": "某个不知名杯赛开始报名"},
         ])
         profile = assess(record, _corpus("今天天气不错"), None, None, do_search=False)
+        self.assertEqual(profile.verdict, "inconclusive")
+        self.assertTrue(profile.included)
+
+    def test_only_explicit_negative_evidence_excludes(self):
+        profile = assess(
+            self._non_ynu_record("某个不知名杯赛"),
+            _corpus("今天天气不错"), None, None,
+            do_search=False, definitive_negative=True,
+        )
         self.assertEqual(profile.verdict, "insufficient")
         self.assertFalse(profile.included)
 
@@ -103,7 +112,7 @@ class TestVerdict(unittest.TestCase):
         ])
         profile = assess(record, Corpus(), None, None, do_search=False)
         self.assertIsNotNone(corpus)  # 语料构建可用
-        self.assertEqual(profile.verdict, "insufficient")
+        self.assertEqual(profile.verdict, "inconclusive")
 
     def _non_ynu_record(self, name):
         return _record(name, notices=[
@@ -131,7 +140,7 @@ class TestVerdict(unittest.TestCase):
         self.assertEqual(profile.queries_run, 1)
         self.assertTrue(any("检索未全部完成" in n for n in profile.notes))
 
-    def test_all_queries_complete_without_evidence_is_insufficient(self):
+    def test_all_queries_complete_without_evidence_is_inconclusive(self):
         def fake_search(fetcher, query, pages=1, ttl_hours=None):
             return [], "serpapi-baidu", True
 
@@ -141,7 +150,7 @@ class TestVerdict(unittest.TestCase):
             profile = assess(self._non_ynu_record("某个不知名杯赛"), Corpus(), None, None,
                              do_search=True)
 
-        self.assertEqual(profile.verdict, "insufficient")
+        self.assertEqual(profile.verdict, "inconclusive")
         self.assertEqual(profile.queries_run, 2)
 
 

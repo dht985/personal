@@ -25,7 +25,7 @@ class Check:
 
 def _deps() -> Check:
     missing = []
-    for module in ("requests", "lxml", "pdfplumber"):
+    for module in ("requests", "lxml", "pdfplumber", "docx", "openpyxl"):
         try:
             __import__(module)
         except ImportError:
@@ -34,7 +34,10 @@ def _deps() -> Check:
         return Check("依赖库", "fail", f"缺少 {', '.join(missing)}，请先 pip install -r requirements.txt")
     import sys
 
-    return Check("依赖库", "ok", f"Python {sys.version.split()[0]}，requests/lxml/pdfplumber 均可用")
+    return Check(
+        "依赖库", "ok",
+        f"Python {sys.version.split()[0]}，网页/PDF/Word/Excel 解析库均可用",
+    )
 
 
 def _configs(cfg: Config) -> Check:

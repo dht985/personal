@@ -58,6 +58,12 @@ def find_dates(text: str, base_year: int | None = None) -> list[dict]:
     out: list[dict] = []
     seen_spans: list[tuple[int, int]] = []
     for m in DATE_FULL.finditer(text):
+        # "2026年11月2.大数据挑战赛" 常是"11月"后面接第2个标题，
+        # 不是11月2日。要求中文年月日期没有"日"时，后面不能紧跟列表编号点。
+        # 中文年月格式要求明确写"日"，避免把"2026年11月"后接
+        # 编号"2."误识别成11月2日。
+        if "年" in m.group(0) and "日" not in m.group(0):
+            continue
         iso = _iso(int(m.group("y")), int(m.group("m")), int(m.group("d")))
         if iso:
             out.append({"value": iso, "raw": m.group(0), "start": m.start(), "end": m.end()})
@@ -65,6 +71,10 @@ def find_dates(text: str, base_year: int | None = None) -> list[dict]:
     if base_year:
         for m in DATE_SHORT.finditer(text):
             if any(s <= m.start() < e for s, e in seen_spans):
+                continue
+            # DATE_FULL 已因列表编号点拒绝的 "2026年11月2."，
+            # 不允许 DATE_SHORT 再把其中的 "11月2" 捡回来。
+            if re.search(r"20\d{2}\s*年\s*$", text[max(0, m.start() - 8):m.start()]):
                 continue
             iso = _iso(base_year, int(m.group("m")), int(m.group("d")))
             if iso:

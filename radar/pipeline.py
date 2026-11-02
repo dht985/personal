@@ -16,7 +16,10 @@ from .net import Fetcher
 from .notify import dispatch
 from .report import best_notice, render_card, render_digest, render_notifications
 from .requirement import assess_requirement
-from .sources import Notice, collect_discovery, collect_official, enrich_details
+from .sources import (
+    Notice, collect_discovery, collect_official, enrich_details,
+    resolve_redirect, resolve_sogou, search_web,
+)
 from .store import Change, Store, TRACKED_FIELDS
 from .szcp import SzcpRules
 from .textutil import canonical_url, normalize_name, squeeze
@@ -136,19 +139,185 @@ def _append_notice(rec: dict, notice: dict) -> None:
 
 
 def _append_evidence(rec: dict, items: list[dict], limit: int = 6) -> None:
-    seen = {e.get("evidence") for e in rec["registration_evidence"]}
+    seen = {(e.get("evidence"), e.get("value")) for e in rec["registration_evidence"]}
     for item in items:
-        if not item.get("evidence") or item["evidence"] in seen:
+        key = (item.get("evidence"), item.get("value"))
+        if not item.get("evidence") or key in seen:
             continue
-        seen.add(item["evidence"])
+        seen.add(key)
         rec["registration_evidence"].append(item)
         if len(rec["registration_evidence"]) >= limit:
             return
 
 
+def _apply_extraction(
+    rec: dict, extracted: dict, summary: dict, source_url: str,
+) -> None:
+    """把一条正文/附件的抽取结果合并进赛事实体，保留字段来源。"""
+    if not rec.get("registration_first") and summary.get("registration_first"):
+        rec["registration_first"] = summary["registration_first"]
+    if not rec.get("registration_last") and summary.get("registration_last"):
+        rec["registration_last"] = summary["registration_last"]
+    if summary.get("registration_next"):
+        current = rec.get("registration_next")
+        candidates = [d for d in (current, summary["registration_next"]) if d]
+        rec["registration_next"] = min(candidates)
+
+    deadlines = set(rec.get("registration_deadlines") or [])
+    deadlines.update(summary.get("registration_deadlines") or [])
+    if deadlines:
+        rec["registration_deadlines"] = sorted(deadlines)
+
+    evidence = []
+    for item in extracted.get("registration", []):
+        copy = dict(item)
+        copy["source_url"] = source_url
+        evidence.append(copy)
+    _append_evidence(rec, evidence, limit=12)
+
+    for field, out_field in (
+        ("fee", "fee_text"),
+        ("team", "team_text"),
+        ("eligibility", "eligibility_text"),
+        ("organizer", "organizer_text"),
+        ("contest_time", "contest_time_text"),
+        ("submission", "submission_time_text"),
+    ):
+        items = extracted.get(field) or []
+        if not rec.get(out_field) and items:
+            rec[out_field] = f"{items[0]['value']}｜原文：{items[0]['evidence'][:100]}"
+        if field in ("contest_time", "submission"):
+            bucket = rec.setdefault(f"{field}_evidence", [])
+            known = {(e.get("value"), e.get("evidence"), e.get("source_url")) for e in bucket}
+            for item in items:
+                copy = dict(item)
+                copy["source_url"] = source_url
+                key = (copy.get("value"), copy.get("evidence"), source_url)
+                if key not in known:
+                    bucket.append(copy)
+                    known.add(key)
+
+
+def _extract_notice_documents(notice: Notice) -> list[tuple[str, dict]]:
+    """正文与每个可读附件分别抽取，保证证据能指向准确来源 URL。"""
+    documents: dict[str, str] = {}
+    if notice.page_body or notice.body:
+        documents[notice.url] = notice.page_body or notice.body
+    for item in notice.attachment_documents:
+        text = item.get("text") or ""
+        url = item.get("url") or notice.url
+        if text and url not in documents:
+            documents[url] = text
+    out = []
+    for url, text in documents.items():
+        extracted = extract_fields(
+            notice.title, text, url,
+            external_links=notice.external_links,
+            published_at=notice.published_at,
+        )
+        out.append((url, extracted))
+    return out
+
+
+def _fill_catalog_date_gaps(
+    cfg: Config, fetcher: Fetcher, records: dict[str, dict],
+    limit: int, log=print,
+) -> dict:
+    """对目录内缺日期赛事做定向补查；只接受详情页/附件抽出的日期。"""
+    candidates = [
+        rec for rec in records.values()
+        if rec.get("catalog_no")
+        and not rec.get("registration_last")
+    ]
+    category_order = {"一类": 0, "二类": 1, "三类": 2, "四类": 3}
+    candidates.sort(
+        key=lambda rec: (
+            category_order.get(rec.get("catalog_category"), 9),
+            rec.get("name", ""),
+        )
+    )
+    resolved = 0
+    queries = 0
+    for rec in candidates[:limit]:
+        query = f"{rec['name']} {date.today().year} 报名截止"
+        hits, engine, ok = search_web(
+            fetcher, query, pages=1, ttl_hours=24 * 7,
+        )
+        if not ok:
+            continue
+        queries += 1
+        checked = 0
+        for hit in hits[:5]:
+            url = hit.get("url", "")
+            if "so.com/link" in url:
+                url = resolve_redirect(fetcher, url)
+            elif "sogou.com/link" in url:
+                url = resolve_sogou(fetcher, url)
+            host_ok = any(
+                suffix in url for suffix in (".edu.cn", ".gov.cn", "cahe.edu.cn")
+            )
+            if not url.startswith("http") or not host_ok:
+                continue
+            if any(canonical_url(n.get("url")) == canonical_url(url)
+                   for n in rec.get("notices", [])):
+                continue
+            notice = Notice(
+                source_id=f"date-gap-{engine}",
+                source_name=f"{engine}定向补查",
+                authority="other-official" if ".edu.cn" in url or ".gov.cn" in url else "aggregator",
+                scope="national",
+                url=url,
+                title=hit.get("title", rec["name"]),
+                fetched_at=_now(),
+            )
+            enrich_details(cfg, fetcher, [notice], limit=1)
+            checked += 1
+            if notice.body:
+                for source_url, extracted in _extract_notice_documents(notice):
+                    _apply_extraction(
+                        rec, extracted, summarize_dates(extracted), source_url,
+                    )
+                if rec.get("registration_last"):
+                    _append_notice(
+                        rec,
+                        {
+                            "title": notice.title,
+                            "url": url,
+                            "source_id": notice.source_id,
+                            "source_name": notice.source_name,
+                            "authority": notice.authority,
+                            "published_at": notice.published_at,
+                            "list_date": None,
+                            "fetched_at": notice.fetched_at,
+                            "body_excerpt": (notice.body or "")[:4000],
+                            "attachments": notice.attachments,
+                            "attachment_documents": [
+                                {
+                                    "name": item.get("name", ""),
+                                    "url": item.get("url", ""),
+                                    "kind": item.get("kind", ""),
+                                    "text_len": len(item.get("text", "")),
+                                    "error": item.get("error", ""),
+                                }
+                                for item in notice.attachment_documents
+                            ],
+                            "extraction_errors": notice.extraction_errors,
+                        },
+                    )
+                    resolved += 1
+                    break
+            if checked >= 3:
+                break
+        if resolved >= max(2, limit // 2):
+            break
+    log(f"      日期定向补查：{resolved}/{queries} 个赛事补到日期")
+    return {"date_gap_queries": queries, "date_gap_resolved": resolved}
+
+
 FIELD_CHANGE_TYPES = {
     "registration_first": "日期变化",
     "registration_last": "日期变化",
+    "deadline_reliability": "日期来源变化",
     "tier": "等级变化",
     "catalog_category": "目录类别变化",
     "fee_text": "费用变化",
@@ -161,6 +330,7 @@ FIELD_CHANGE_TYPES = {
 FIELD_LABELS = {
     "registration_first": "报名开始",
     "registration_last": "报名截止",
+    "deadline_reliability": "报名日期来源可信度",
     "tier": "关注等级",
     "catalog_category": "认定目录类别",
     "fee_text": "费用",
@@ -255,12 +425,18 @@ def _queue_pushes(
               "建议向学院或本科生院确认是否纳入认定范围。",
         )
 
-    if rec.get("deadline_status") == "30天内截止":
+    if (
+        rec.get("deadline_status") == "30天内截止"
+        and rec.get("deadline_reliability") == "云大官方"
+    ):
         queue("临近截止", rec.get("registration_last") or "unknown",
               f"临近截止：{rec['name']}", _push_body(rec))
 
     for ch in rec_changes:
-        if ch.field == "registration_last":
+        if (
+            ch.field == "registration_last"
+            and rec.get("deadline_reliability") == "云大官方"
+        ):
             queue("日期变更", f"{ch.old_value}->{ch.new_value}",
                   f"报名截止日期变化：{rec['name']}", _push_body(rec))
 
@@ -373,14 +549,12 @@ def run_pipeline(
 
         prev_cat = prev_entry.category if prev_entry is not None else None
 
-        extracted = extract_fields(
-            n.title,
-            n.body,
-            n.url,
-            external_links=n.external_links,
-            published_at=n.published_at,
-        )
-        summary = summarize_dates(extracted)
+        document_extractions = _extract_notice_documents(n)
+        summary = summarize_dates(document_extractions[0][1]) if document_extractions else {
+            "registration_first": None, "registration_last": None,
+            "registration_next": None, "registration_deadlines": [],
+            "registration_raw": [],
+        }
 
         rec = records.get(key)
         if rec is None:
@@ -412,7 +586,19 @@ def run_pipeline(
                 "published_at": n.published_at,
                 "list_date": n.list_date,
                 "fetched_at": n.fetched_at,
-                "body_excerpt": (n.body or "")[:800],
+                "body_excerpt": (n.body or "")[:4000],
+                "attachments": n.attachments,
+                "attachment_documents": [
+                    {
+                        "name": item.get("name", ""),
+                        "url": item.get("url", ""),
+                        "kind": item.get("kind", ""),
+                        "text_len": len(item.get("text", "")),
+                        "error": item.get("error", ""),
+                    }
+                    for item in n.attachment_documents
+                ],
+                "extraction_errors": n.extraction_errors,
             }
         )
         rec["sources"].append(n.source_name)
@@ -420,22 +606,10 @@ def run_pipeline(
             url = link.get("url")
             if url and url not in rec["official_links"]:
                 rec["official_links"].append(url)
-        if not rec.get("registration_last"):
-            rec["registration_first"] = summary["registration_first"]
-            rec["registration_last"] = summary["registration_last"]
-        _append_evidence(rec, extracted["registration"])
-        for field, out_field in (
-            ("fee", "fee_text"),
-            ("team", "team_text"),
-            ("eligibility", "eligibility_text"),
-            ("organizer", "organizer_text"),
-            ("contest_time", "contest_time_text"),
-        ):
-            if not rec.get(out_field):
-                items = extracted.get(field) or []
-                if items:
-                    rec[out_field] = f"{items[0]['value']}｜原文：{items[0]['evidence'][:80]}"
-        rec["_extracted"] = extracted
+        for source_url, extracted in document_extractions:
+            _apply_extraction(
+                rec, extracted, summarize_dates(extracted), source_url,
+            )
 
     stats["records_from_official"] = len(records)
 
@@ -475,9 +649,25 @@ def run_pipeline(
 
     log("[4/6] 主动发现通道检索")
     discovery: list[dict] = []
+    discovery_detail_done = 0
+    discovery_detail_fetched = 0
+    discovery_detail_limit = int(
+        cfg.settings.get("run", {}).get("discovery_detail_limit", 30)
+    )
     if use_search and not offline:
         hits = collect_discovery(cfg, fetcher, stats=stats)
         stats["discovery_hits"] = len(hits)
+        # 详情预算优先给目录赛事、明确通知和当前年份结果，避免被旧攻略消耗。
+        hits.sort(
+            key=lambda h: (
+                not bool(re.search(r"通知|报名|启动|选拔|赛程", h.get("title", ""))),
+                catalog.match(guess_competition_name(h.get("title", "")))[0] is None,
+                str(date.today().year) not in (
+                    h.get("title", "") + " " + h.get("snippet", "")
+                ),
+                h.get("title", ""),
+            )
+        )
         for h in hits:
             keep = _keep_discovery(h, cfg)
             h["kept"] = keep
@@ -543,24 +733,78 @@ def run_pipeline(
                         "registration_evidence": [],
                     }
                     rec = records[key]
+
+            discovered_notice = Notice(
+                source_id=f"discovery-{h.get('engine', 'search')}",
+                source_name=f"{h.get('engine', '搜索')}发现",
+                authority="aggregator",
+                scope="discovered",
+                url=real_url,
+                title=h["title"],
+                list_date=None,
+                fetched_at=_now(),
+            )
+            if discovery_detail_done < discovery_detail_limit:
+                enrich_details(cfg, fetcher, [discovered_notice], limit=1)
+                discovery_detail_done += 1
+                if discovered_notice.body:
+                    discovery_detail_fetched += 1
+            h["detail_fetched"] = bool(discovered_notice.body)
+            h["attachments"] = discovered_notice.attachments
+            h["extraction_errors"] = discovered_notice.extraction_errors
+            document_extractions = _extract_notice_documents(discovered_notice)
+            if not document_extractions and h.get("snippet"):
+                extracted = extract_fields(
+                    discovered_notice.title or h["title"], h["snippet"], real_url,
+                    published_at=None,
+                )
+                document_extractions = [(real_url, extracted)]
+            for source_url, extracted in document_extractions:
+                _apply_extraction(
+                    rec, extracted, summarize_dates(extracted), source_url,
+                )
             _append_notice(
                 rec,
                 {
-                    "title": h["title"],
+                    "title": discovered_notice.title or h["title"],
                     "url": real_url,
-                    "source_id": "search360",
-                    "source_name": "360搜索发现",
+                    "source_id": discovered_notice.source_id,
+                    "source_name": discovered_notice.source_name,
                     "authority": "aggregator",
-                    "published_at": None,
+                    "published_at": discovered_notice.published_at,
                     "list_date": None,
-                    "fetched_at": _now(),
-                    "body_excerpt": h.get("snippet", ""),
+                    "fetched_at": discovered_notice.fetched_at,
+                    "body_excerpt": (
+                        discovered_notice.body or h.get("snippet", "")
+                    )[:4000],
+                    "attachments": discovered_notice.attachments,
+                    "attachment_documents": [
+                        {
+                            "name": item.get("name", ""),
+                            "url": item.get("url", ""),
+                            "kind": item.get("kind", ""),
+                            "text_len": len(item.get("text", "")),
+                            "error": item.get("error", ""),
+                        }
+                        for item in discovered_notice.attachment_documents
+                    ],
+                    "extraction_errors": discovered_notice.extraction_errors,
                 }
             )
         stats["discovery_kept"] = sum(1 for d in discovery if d.get("kept"))
+        stats["discovery_detail_fetched"] = discovery_detail_fetched
+        stats["detail_fetched"] += discovery_detail_fetched
     else:
         stats["discovery_hits"] = 0
         stats["discovery_kept"] = 0
+
+    if use_search and not offline:
+        stats.update(
+            _fill_catalog_date_gaps(
+                cfg, fetcher, records,
+                int(cfg.settings.get("run", {}).get("date_gap_search_limit", 8)),
+            )
+        )
 
     log("[5/6] 价值评估与分层（写入 SQLite）")
     store = Store(cfg.db_path)
@@ -644,6 +888,12 @@ def run_pipeline(
         elif stale_profile is not None:
             reused = dict(stale_profile)
             reused["stale"] = True
+            if reused.get("verdict") == "insufficient":
+                reused["verdict"] = "inconclusive"
+                reused.setdefault("notes", []).append(
+                    "旧版本曾因检索无结果判不足；新规则要求明确否定证据，"
+                    "先恢复为证据不充分"
+                )
             reused.setdefault("notes", []).append("本轮额度不足，沿用上次评估结论")
             rec["ynu_profile"] = reused
             rec["profile_checked_at"] = prev["profile_checked_at"]
@@ -730,6 +980,20 @@ def run_pipeline(
         rec["last_verified"] = _now()
 
     stats["new_records"] = new_count
+    attachment_documents: dict[str, dict] = {}
+    for rec in records.values():
+        for notice in rec.get("notices", []):
+            for document in notice.get("attachment_documents") or []:
+                key = document.get("url") or document.get("name")
+                if key:
+                    attachment_documents[key] = document
+    stats["attachment_documents"] = len(attachment_documents)
+    stats["attachment_text_parsed"] = sum(
+        1 for item in attachment_documents.values() if int(item.get("text_len") or 0) > 0
+    )
+    stats["attachment_errors"] = sum(
+        1 for item in attachment_documents.values() if item.get("error")
+    )
     included = [r for r in records.values() if r.get("visibility") == "included"]
     excluded = [r for r in records.values() if r.get("visibility") == "excluded"]
     pending_profiles = [

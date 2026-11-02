@@ -46,6 +46,8 @@ class Fetcher:
         self.offline = offline
         self.force = force  # 忽略缓存，强制重新抓取
         self.timeout = http["timeout_seconds"]
+        self.attachment_timeout = http.get("attachment_timeout_seconds", 12)
+        self.attachment_retries = http.get("attachment_max_retries", 2)
         self.min_interval = http["min_host_interval_seconds"]
         self.max_retries = http["max_retries"]
         self.ttl = timedelta(hours=http.get("cache_ttl_hours", 6))
@@ -204,7 +206,10 @@ class Fetcher:
         self.stats["errors"] += 1
         return FetchResult(url, url, None, "", None, _now(), error=last_error or "unknown error")
 
-    def fetch_bytes(self, url: str, referer: str | None = None) -> tuple[bytes | None, str]:
+    def fetch_bytes(
+        self, url: str, referer: str | None = None,
+        max_bytes: int = 20 * 1024 * 1024,
+    ) -> tuple[bytes | None, str]:
         """下载二进制附件（PDF/Office），返回 (内容, 服务端文件名)。"""
         body, meta = self._cache_paths(url)
         if body.exists() and meta.exists():
@@ -218,10 +223,12 @@ class Fetcher:
                 pass
         host = urllib.parse.urlsplit(url).netloc
         headers = {"Referer": referer} if referer else {}
-        for attempt in range(1, self.max_retries + 1):
+        for attempt in range(1, self.attachment_retries + 1):
             self._throttle(host)
             try:
-                resp = self.session.get(url, timeout=self.timeout, headers=headers)
+                resp = self.session.get(
+                    url, timeout=self.attachment_timeout, headers=headers, stream=True,
+                )
                 self.stats["requests"] += 1
                 if resp.status_code != 200:
                     time.sleep(1.2 * attempt)
@@ -232,8 +239,18 @@ class Fetcher:
                     filename = urllib.parse.unquote(
                         disp.split("filename=", 1)[1].strip().strip('"').strip("'")
                     )
+                chunks = []
+                total = 0
+                for chunk in resp.iter_content(64 * 1024):
+                    if not chunk:
+                        continue
+                    total += len(chunk)
+                    if total > max_bytes:
+                        raise requests.RequestException("attachment too large")
+                    chunks.append(chunk)
+                content = b"".join(chunks)
                 if self.save_raw:
-                    body.write_bytes(resp.content)
+                    body.write_bytes(content)
                     meta.write_text(
                         json.dumps(
                             {
@@ -242,14 +259,14 @@ class Fetcher:
                                 "content_type": resp.headers.get("Content-Type", ""),
                                 "filename": filename,
                                 "fetched_at": _now(),
-                                "bytes": len(resp.content),
+                                "bytes": len(content),
                             },
                             ensure_ascii=False,
                             indent=2,
                         ),
                         encoding="utf-8",
                     )
-                return resp.content, filename
+                return content, filename
             except requests.RequestException:
                 time.sleep(1.2 * attempt)
         self.stats["errors"] += 1

@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 import requests
 from lxml import html as lxml_html
 
+from .attachments import extract_attachment, extract_attachments
 from .config import Config
 from .net import Fetcher
 from .parse import parse_detail_page, parse_list_page
@@ -48,8 +49,11 @@ class Notice:
     list_date: str | None = None
     published_at: str | None = None
     body: str = ""
+    page_body: str = ""
     external_links: list = field(default_factory=list)
     attachments: list = field(default_factory=list)
+    attachment_documents: list = field(default_factory=list)
+    extraction_errors: list = field(default_factory=list)
     fetched_at: str = ""
     from_cache: bool = False
 
@@ -64,8 +68,20 @@ class Notice:
             "list_date": self.list_date,
             "published_at": self.published_at,
             "body_len": len(self.body or ""),
+            "page_body_len": len(self.page_body or ""),
             "external_links": self.external_links,
             "attachments": self.attachments,
+            "attachment_documents": [
+                {
+                    "name": item.get("name", ""),
+                    "url": item.get("url", ""),
+                    "kind": item.get("kind", ""),
+                    "text_len": len(item.get("text", "")),
+                    "error": item.get("error", ""),
+                }
+                for item in self.attachment_documents
+            ],
+            "extraction_errors": self.extraction_errors,
             "fetched_at": self.fetched_at,
             "from_cache": self.from_cache,
         }
@@ -153,17 +169,51 @@ def enrich_details(
             break
         res = fetcher.fetch(n.url)
         done += 1
-        if not res.ok or not res.text:
+        if not res.ok:
+            n.extraction_errors.append(res.error or f"HTTP {res.status}")
+            continue
+        is_pdf = "application/pdf" in (res.content_type or "").lower()
+        if is_pdf:
+            document = extract_attachment(fetcher, n.url, n.title)
+            n.attachment_documents.append(document)
+            n.attachments.append({"name": n.title, "url": n.url})
+            if document["text"]:
+                n.body = document["text"]
+                n.page_body = document["text"]
+                n.published_at = n.published_at or n.list_date
+                n.fetched_at = res.fetched_at
+                n.from_cache = res.from_cache
+            else:
+                n.extraction_errors.append(document["error"] or "PDF 无文本")
+            continue
+        if not res.text:
+            n.extraction_errors.append("详情页正文为空")
             continue
         parsed = parse_detail_page(res.text, n.url, OWN_HOSTS, LINK_FILTER)
         if parsed["title"] and len(parsed["title"]) >= len(n.title or ""):
             n.title = parsed["title"]
         n.body = parsed["body"]
+        n.page_body = parsed["body"]
         n.published_at = parsed["published_at"] or n.list_date
         n.external_links = parsed["external_links"]
         n.attachments = parsed["attachments"]
         n.fetched_at = res.fetched_at
         n.from_cache = res.from_cache
+        if n.attachments:
+            documents = extract_attachments(fetcher, n.attachments, referer=n.url)
+            n.attachment_documents.extend(documents)
+            attachment_text = []
+            for document in documents:
+                if document.get("text"):
+                    attachment_text.append(
+                        f"\n[附件 {document['name']}]\n{document['text']}"
+                    )
+                elif document.get("error"):
+                    n.extraction_errors.append(
+                        f"{document.get('name') or document['url']}: {document['error']}"
+                    )
+            if attachment_text:
+                n.body = clean_text(n.body + "\n" + "\n".join(attachment_text))
     return done
 
 

@@ -17,6 +17,8 @@ szcp_college = "data/szcp_college.json"
 [http]
 user_agent = "CompRadarYNU/0.1 (undergraduate competition radar; personal research use)"
 timeout_seconds = 25
+attachment_timeout_seconds = 12
+attachment_max_retries = 2
 min_host_interval_seconds = 1.2
 max_retries = 3
 cache_ttl_hours = 6
@@ -27,6 +29,10 @@ save_raw = true
 lookback_days = 400
 # max detail pages fetched per run (keeps a run short and polite)
 detail_limit = 70
+# search results are leads only; fetch these detail pages before extracting
+discovery_detail_limit = 30
+# catalog competitions still missing dates after official/discovery parsing
+date_gap_search_limit = 8
 # max result pages per search engine
 search_pages = 2
 
