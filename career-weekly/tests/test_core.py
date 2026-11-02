@@ -12,7 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from cw.classify import is_relevant, match_tracks, signal_type  # noqa: E402
-from cw.config import load  # noqa: E402
+from cw.config import load, source_purpose  # noqa: E402
+from cw.discover_sources import candidate_links  # noqa: E402
 from cw.llm import action_is_stale  # noqa: E402
 from cw.parse import parse_list  # noqa: E402
 from cw.report import render  # noqa: E402
@@ -49,6 +50,13 @@ class TestParse(unittest.TestCase):
 class TestClassify(unittest.TestCase):
     def test_signal_types(self):
         self.assertEqual(signal_type("中国电科2027届校园招聘正式启动"), "招聘")
+        self.assertEqual(signal_type("集团发布人工智能发展规划"), "政策")
+        self.assertEqual(signal_type("数据安全管理办法正式施行"), "政策")
+        self.assertEqual(
+            signal_type("国家能源投资集团有限责任公司2027年度高校毕业生统招公告"),
+            "招聘",
+        )
+        self.assertNotEqual(signal_type("从经验规划到智能决策的配网变革"), "政策")
         self.assertEqual(signal_type("某项目招标公告"), "采购")
         self.assertEqual(signal_type("某项目建设正式开工"), "项目")
         self.assertEqual(signal_type("集团完成战略投资"), "投资")
@@ -65,6 +73,45 @@ class TestClassify(unittest.TestCase):
         cfg = load(ROOT)
         tracks = match_tracks("招聘嵌入式软件工程师，要求熟悉FPGA", cfg.tracks)
         self.assertIn("embedded", tracks)
+
+    def test_policy_source_keeps_policy_notice(self):
+        self.assertTrue(is_relevant("集团发布发展规划", "policy"))
+        self.assertFalse(is_relevant("集团发布发展规划", "news"))
+
+
+class TestSourcePurpose(unittest.TestCase):
+    def test_explicit_and_inferred_purpose(self):
+        self.assertEqual(source_purpose({"purpose": "recruit"}), "recruit")
+        self.assertEqual(source_purpose({"name": "某某·招聘公告"}), "recruit")
+        self.assertEqual(source_purpose({"name": "某某·信息公开"}), "policy")
+        self.assertEqual(source_purpose({"name": "某某·新闻中心"}), "news")
+
+    def test_config_keeps_all_manual_sources_without_url(self):
+        cfg = load(ROOT)
+        manual_ids = {
+            source["id"] for source in cfg.sources if source.get("kind") == "manual"
+        }
+        self.assertEqual(
+            manual_ids,
+            {"manual-211", "manual-sgcc", "manual-cnpc"},
+        )
+
+
+class TestDiscovery(unittest.TestCase):
+    def test_candidate_links_are_scoped_and_ranked(self):
+        raw = """
+        <a href="/news/">集团新闻中心</a>
+        <a href="/jobs/">人才招聘</a>
+        <a href="https://other.example/jobs/">外部招聘</a>
+        <a href="https://www.example.com/recruit/">校园招聘公告</a>
+        """
+        links = candidate_links(
+            raw, "https://www.example.com/", "recruit",
+            "https://www.example.com/",
+        )
+        self.assertEqual(len(links), 2)
+        self.assertTrue(all("example.com" in item["url"] for item in links))
+        self.assertTrue(any("校园招聘公告" in item["title"] for item in links))
 
 
 class TestStore(unittest.TestCase):
@@ -83,6 +130,25 @@ class TestStore(unittest.TestCase):
         }
         self.assertTrue(self.store.upsert(item))
         self.assertFalse(self.store.upsert(item))
+        item["level"] = 3
+        item["title"] = "更新后的标题"
+        self.assertFalse(self.store.upsert(item))
+        row = self.store.conn.execute("SELECT level, title FROM items").fetchone()
+        self.assertEqual(row["level"], 3)
+        self.assertEqual(row["title"], "更新后的标题")
+
+    def test_discovery_attempt_is_persisted_and_upserted(self):
+        url = "https://example.com/jobs/"
+        self.store.record_discovery("u", "recruit", "招聘", url, "rejected", "短页面")
+        self.assertIsNotNone(self.store.discovery_checked_at("u", "recruit", url))
+        self.store.record_discovery("u", "recruit", "招聘", url, "accepted", "有效")
+        row = self.store.conn.execute(
+            "SELECT status, detail FROM discovery_attempts WHERE candidate_url = ?",
+            (url,),
+        ).fetchone()
+        self.assertEqual(row["status"], "accepted")
+        self.assertEqual(row["detail"], "有效")
+        self.assertEqual(self.store.discovery_summary(), {"accepted": 1})
 
 
 class TestActionFreshness(unittest.TestCase):
@@ -103,6 +169,7 @@ class TestReport(unittest.TestCase):
                 "url": "https://example.com/a", "title": "中国电科2027届校园招聘正式启动",
                 "level": 1, "unit_path": "中国电科", "signal_type": "招聘",
                 "source_name": "中国电科·招聘及公告", "published_at": RECENT,
+                "source_purpose": "recruit",
                 "tracks": [], "tags": [], "is_new": True,
                 "triage": {"include": True, "reason": "校园招聘"},
             },
@@ -110,6 +177,7 @@ class TestReport(unittest.TestCase):
                 "url": "https://example.com/b", "title": "54所获批国家自然科学基金项目",
                 "level": 2, "unit_path": "中国电科 > 54所", "signal_type": "项目",
                 "source_name": "54所·新闻动态", "published_at": RECENT,
+                "source_purpose": "news",
                 "tracks": [], "tags": [], "is_new": True,
                 "triage": {"include": True, "reason": "技术项目"},
             },
@@ -117,10 +185,12 @@ class TestReport(unittest.TestCase):
         text = render(items, cfg, {
             "sources_ok": 2, "sources_total": 2, "raw_items": 2,
             "new_items": 2, "triaged": 2,
+            "source_purposes": {"recruit": 1, "policy": 2, "news": 3},
         })
         self.assertIn("L1 集团总部", text)
         self.assertIn("L2 院所/子公司", text)
         self.assertIn("https://example.com/a", text)
+        self.assertIn("招聘源 1 个，政策源 2 个", text)
         self.assertLess(len(text), 4200)
 
 

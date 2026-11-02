@@ -6,12 +6,12 @@ import re
 
 from .classify import is_relevant, match_tags, match_tracks, signal_type
 from .browser import render_many
-from .config import Config
+from .config import Config, source_purpose
 from .llm import triage_batch
 from .manual import parse as parse_manual
 from .net import Fetcher
 from .parse import parse_list
-from .report import render
+from .report import PRIORITY, render
 from .store import Store
 from .toast import send as send_toast
 
@@ -20,6 +20,12 @@ def _event_key(title: str) -> str:
     """同一事件在不同来源的标题可能带日期前缀或标点差异。"""
     t = re.sub(r"^20\d{2}[.\-/年]\d{1,2}[.\-/月]\d{1,2}日?\s*", "", title or "")
     return re.sub(r"[\s\W_]+", "", t)[:60]
+
+
+def _resolve_unit(item: dict, cfg: Config, units: dict[str, dict]) -> None:
+    unit = units.get(item["unit_id"], {})
+    item["unit_path"] = cfg.path_of(item["unit_id"])
+    item["level"] = int(unit.get("level", 0))
 
 
 def run(
@@ -56,6 +62,8 @@ def run(
                     "tracks": match_tracks(it["title"], cfg.tracks),
                     "tags": match_tags(it["title"], cfg.tags),
                 }
+                item["source_purpose"] = src["purpose"]
+                _resolve_unit(item, cfg, units)
                 item["is_new"] = store.upsert(item)
                 raw_items.append(item)
             continue
@@ -76,12 +84,13 @@ def run(
             sig = signal_type(it["title"])
             if sig is None:
                 continue
-            if not is_relevant(it["title"]):
+            if not is_relevant(it["title"], src["purpose"]):
                 continue
             item = {
                 **it,
                 "source_id": src["id"],
                 "source_name": src["name"],
+                "source_purpose": src["purpose"],
                 "unit_id": src["unit"],
                 "unit_path": cfg.path_of(src["unit"]),
                 "level": int(unit.get("level", 0)),
@@ -91,15 +100,17 @@ def run(
             }
             # 校招汇总源：标题里出现哪家单位，就归到哪家
             if item["unit_id"] == "ynu-career":
-                for uid, unit in units.items():
+                for uid, candidate_unit in units.items():
                     if uid == "ynu-career":
                         continue
-                    names = [unit.get("short", ""), unit.get("name", "")]
+                    names = [
+                        candidate_unit.get("short", ""),
+                        candidate_unit.get("name", ""),
+                    ]
                     if any(n and n in item["title"] for n in names):
                         item["unit_id"] = uid
-                        item["level"] = int(unit.get("level", 0))
-                        item["unit_path"] = cfg.path_of(uid)
                         break
+            _resolve_unit(item, cfg, units)
             if item["url"] in seen_urls:
                 continue
             seen_urls.add(item["url"])
@@ -126,7 +137,7 @@ def run(
     raw_items.sort(key=lambda x: x.get("published_at") or "", reverse=True)
     raw_items.sort(
         key=lambda x: (
-            {"招聘": 0, "采购": 1, "项目": 2, "投资": 3, "战略": 4, "技术": 5}[x["signal_type"]],
+            PRIORITY[x["signal_type"]],
             not x["is_new"],
         )
     )
@@ -142,7 +153,11 @@ def run(
         for i, item in enumerate(chunk):
             d = decisions.get(i)
             if d is None:
-                item["triage"] = {"include": True, "reason": "规则命中"}
+                item["triage"] = {
+                    "include": True,
+                    "reason": "规则命中",
+                    "method": "rules",
+                }
             else:
                 item["triage"] = d
             triaged.append(item)
@@ -152,7 +167,10 @@ def run(
     # 层级配额 + 单单位上限，避免某一家刷屏
     per_unit = int(cfg.settings["report"].get("max_items_per_unit", 3))
     quotas = {1: 8, 2: 3, 3: 1}
-    signal_quota = {"招聘": 6, "采购": 2, "项目": 4, "投资": 2, "战略": 2, "技术": 4}
+    signal_quota = {
+        "招聘": 5, "政策": 4, "采购": 1, "项目": 3,
+        "投资": 1, "战略": 1, "技术": 3,
+    }
     selected: list[dict] = []
     used: dict[str, int] = {}
     sig_used: dict[str, int] = {}
@@ -198,6 +216,11 @@ def run(
         "triage_fallback_batches": fallback_batches,
         "llm_fallbacks": fallback_batches,
         "detail_fetched": 0,
+        "source_purposes": {
+            kind: sum(1 for src in active_sources if src["purpose"] == kind)
+            for kind in ("recruit", "policy", "news")
+        },
+        "filter_mode": "llm" if use_llm else "rules",
     }
     text = render(selected, cfg, stats)
     out = cfg.outbox_dir / f"weekly-{date.today().isoformat()}.md"

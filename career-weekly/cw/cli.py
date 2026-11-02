@@ -4,7 +4,7 @@ import argparse
 import os
 import sys
 
-from .config import load
+from .config import SOURCE_PURPOSES, load, source_purpose
 from .discover import candidates, render_toml
 from .net import Fetcher
 from .pipeline import run
@@ -28,6 +28,9 @@ def main(argv=None) -> int:
     sub.add_parser("discover", help="发现 L3 部门/实验室候选")
     sub.add_parser("open", help="打开最新一期周报")
     sub.add_parser("coverage", help="查看各单位的数据覆盖（招聘/采购/项目/投资等）")
+    p_ds = sub.add_parser("discover-sources", help="巡检官网，持续补招聘/政策/新闻栏目")
+    p_ds.add_argument("--limit", type=int, default=4, help="本轮巡检的单位数")
+    p_ds.add_argument("--retry-days", type=int, default=30, help="失败候选的复检间隔")
 
     args = ap.parse_args(argv)
     if args.cmd == "run":
@@ -42,6 +45,23 @@ def main(argv=None) -> int:
         return 0
 
     cfg = load()
+    if args.cmd == "discover-sources":
+        from .discover_sources import discover, save
+
+        added = discover(cfg, limit=args.limit, retry_days=args.retry_days)
+        if added:
+            path = save(cfg, added)
+            print(f"新增 {len(added)} 个自动信源 -> {path}")
+        else:
+            print("本轮没有新增可用信源；巡检状态已持久化，下轮会继续其他单位")
+        store = Store(cfg.db_path)
+        summary = store.discovery_summary()
+        store.conn.close()
+        print("历次巡检记录：" + "，".join(
+            f"{name} {summary.get(name, 0)}" for name in
+            ("accepted", "rejected", "no_candidate", "home_error")
+        ))
+        return 0
     if args.cmd == "open":
         latest = cfg.outbox_dir / "weekly-latest.md"
         if not latest.exists():
@@ -71,13 +91,38 @@ def main(argv=None) -> int:
         by_unit: dict[str, dict[str, int]] = {}
         for r in rows:
             by_unit.setdefault(r["unit_id"], {})[r["signal_type"]] = r["n"]
-        kinds = ["招聘", "采购", "项目", "投资", "战略", "技术"]
+        kinds = ["招聘", "政策", "采购", "项目", "投资", "战略", "技术"]
         active = set(cfg.focus)
         active_data = {k: v for k, v in by_unit.items() if k in active}
         inactive_data = len(by_unit) - len(active_data)
         print(
             f"重点关注单位 {len(active)}，其中有数据 {len(active_data)}；"
             f"未纳入但历史有数据 {inactive_data}"
+        )
+        source_counts = {
+            purpose: sum(
+                1 for src in cfg.sources
+                if src.get("unit") in active and source_purpose(src) == purpose
+            )
+            for purpose in SOURCE_PURPOSES
+        }
+        print(
+            f"重点关注单位信源：招聘 {source_counts['recruit']}，"
+            f"政策 {source_counts['policy']}，新闻/项目 {source_counts['news']}"
+        )
+        covered_channels = {
+            (src.get("unit"), source_purpose(src)) for src in cfg.sources
+        }
+        no_policy = [
+            u for u in cfg.units
+            if u["id"] in active and (u["id"], "policy") not in covered_channels
+        ]
+        no_recruit = [
+            u for u in cfg.units
+            if u["id"] in active and (u["id"], "recruit") not in covered_channels
+        ]
+        print(
+            f"通道缺口：政策 {len(no_policy)} 个单位，招聘 {len(no_recruit)} 个单位"
         )
         print("数据覆盖统计：")
         for k in kinds:

@@ -4,6 +4,24 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+SOURCE_PURPOSES = ("recruit", "policy", "news")
+
+
+def source_purpose(source: dict) -> str:
+    """返回信源用途；未显式标注时按名称和 ID 做保守推断。"""
+    explicit = source.get("purpose")
+    if explicit in SOURCE_PURPOSES:
+        return explicit
+    label = f"{source.get('id', '')} {source.get('name', '')}".lower()
+    if any(k in label for k in ("recruit", "招聘", "人才")):
+        return "recruit"
+    if any(k in label for k in (
+        "policy", "xxgk", "信息公开", "政策", "规划", "制度",
+        "通知公告", "公示公告", "企业公告",
+    )):
+        return "policy"
+    return "news"
+
 
 def root() -> Path:
     return Path(__file__).resolve().parents[1]
@@ -12,6 +30,18 @@ def root() -> Path:
 def _load(path: Path) -> dict:
     with path.open("rb") as fh:
         return tomllib.load(fh)
+
+
+def _sources(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    items = _load(path).get("source", [])
+    out = []
+    for item in items:
+        normalized = dict(item)
+        normalized["purpose"] = source_purpose(normalized)
+        out.append(normalized)
+    return out
 
 
 @dataclass
@@ -64,6 +94,20 @@ def load(base: Path | None = None) -> Config:
     base = base or root()
     cfg_dir = base / "config"
     tracks_data = _load(cfg_dir / "tracks.toml")
+    sources = _sources(cfg_dir / "sources.toml")
+    sources += _sources(cfg_dir / "sources_auto.toml")
+    deduped: list[dict] = []
+    seen_urls: set[str] = set()
+    seen_ids: set[str] = set()
+    for source in sources:
+        url = source.get("url")
+        if (url and url in seen_urls) or source.get("id") in seen_ids:
+            continue
+        if url:
+            seen_urls.add(url)
+        seen_ids.add(source.get("id"))
+        deduped.append(source)
+    sources = deduped
     units = _load(cfg_dir / "units.toml")["unit"]
     l2_path = cfg_dir / "units_l2.toml"
     if l2_path.exists():
@@ -76,6 +120,6 @@ def load(base: Path | None = None) -> Config:
         units=units,
         tracks=tracks_data.get("track", []),
         tags=tracks_data.get("tag", []),
-        sources=_load(cfg_dir / "sources.toml")["source"],
+        sources=sources,
         focus=focus,
     )

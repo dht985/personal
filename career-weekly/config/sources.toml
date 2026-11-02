@@ -5,12 +5,14 @@ id = "cetc-news"
 unit = "cetc"
 name = "中国电科·新闻中心"
 url = "https://www.cetc.com.cn/zgdk/1592571/index.html"
+purpose = "news"
 
 [[source]]
 id = "cetc-recruit"
 unit = "cetc"
 name = "中国电科·招聘及公告"
 url = "https://www.cetc.com.cn/zgdk/1593022/1592495/index.html"
+purpose = "recruit"
 
 [[source]]
 id = "cti-news"
@@ -41,6 +43,7 @@ id = "csg-notice"
 unit = "csg"
 name = "南方电网·企业公告"
 url = "https://www.csg.cn/xwzx/qygg/"
+purpose = "policy"
 
 [[source]]
 id = "chnenergy-news"
@@ -53,6 +56,14 @@ id = "chnenergy-notice"
 unit = "chnenergy"
 name = "国家能源集团·公示公告"
 url = "https://www.ceic.com/gjnyjtww/newCE0706/newlistcom.shtml"
+purpose = "policy"
+
+[[source]]
+id = "chnenergy-recruit"
+unit = "chnenergy"
+name = "国家能源集团·招聘公告"
+url = "https://zhaopin.chnenergy.com.cn/annc/annclist?ggtype=1"
+purpose = "recruit"
 
 # ---- 扩展：军工/能源央企观察层（官网首页可抓） ----
 
@@ -231,4 +242,174 @@ id = "css-home"
 unit = "cec-css"
 name = "中国软件·官网"
 url = "http://www.css.com.cn/"
+render = true
+
+# ---- 数据层：官方招聘与政策/信息公开通道 ----
+# 自动发现按 recruit / policy / news 三种用途补齐；这些是已人工确认的起点。
+
+[[source]]
+id = "cetc-policy"
+unit = "cetc"
+name = "中国电科·集团简介与信息公开"
+url = "https://www.cetc.com.cn/zgdk/1593037/jtjj/index.html"
+purpose = "policy"
+
+[[source]]
+id = "cec-policy"
+unit = "cec"
+name = "中国电子·信息公开"
+url = "https://www.cec.com.cn/%E4%BF%A1%E6%81%AF%E5%85%AC%E5%BC%80"
+purpose = "policy"
+
+[[source]]
+id = "cec-recruit"
+unit = "cec"
+name = "中国电子·人才发展"
+url = "https://career.cec.com.cn/"
+purpose = "recruit"
+render = true
+
+[[source]]
+id = "aecc-notices"
+unit = "aecc"
+name = "中国航发·公告公示"
+url = "https://www.aecc.cn/aecc/gggs/index.html"
+purpose = "recruit"
+
+[[source]]
+id = "avic-recruit"
+unit = "avic"
+name = "航空工业·人才招聘"
+url = "https://www.avic.com/sycd/rczp/"
+purpose = "recruit"
+
+[[source]]
+id = "avic-policy"
+unit = "avic"
+name = "航空工业·信息公开"
+url = "https://www.avic.com/sycd/xxgk/"
+purpose = "policy"
+
+[[source]]
+id = "csgc-recruit"
+unit = "csgc"
+name = "兵器装备·人才招聘"
+url = "https://www.csgc.com.cn/csgc/rlzy/rczp/A003006005Gone1.html"
+purpose = "recruit"
+render = true
+
+[[source]]
+id = "csgc-policy"
+unit = "csgc"
+name = "兵器装备·信息公开"
+url = "https://www.csgc.com.cn/csgc/xxgk/A003013Gone1.html"
+purpose = "policy"
+render = true
+
+[[source]]
+id = "csg-recruit"
+unit = "csg"
+name = "南方电网·员工招聘"
+url = "https://zhaopin.csg.cn/"
+purpose = "recruit"
+render = true
+
+[[source]]
+id = "chng-recruit"
+unit = "chng"
+name = "中国华能·招聘信息"
+url = "https://www.chng.com.cn/list_zpxx/-/article/cQQKaBtwslFy/list/23524/"
+purpose = "recruit"
+render = true
+
+[[source]]
+id = "chng-policy"
+unit = "chng"
+name = "中国华能·信息公开"
+url = "https://www.chng.com.cn/list_gsgg/-/article/cQiN25h5nVZ6/list/705434/"
+purpose = "policy"
+render = true
+
+[[source]]
+id = "cdt-policy"
+unit = "cdt"
+name = "中国大唐·信息公开"
+url = "https://www.china-cdt.com/dtwz/xxgk/jbxx/A024006001Gone1.html"
+purpose = "policy"
+
+[[source]]
+id = "cdt-recruit"
+unit = "cdt"
+name = "中国大唐·招聘平台"
+url = "https://zhaopin.china-cdt.com/index.html"
+purpose = "recruit"
+render = true
+
+[[source]]
+id = "chd-recruit"
+unit = "chd"
+name = "中国华电·招聘信息"
+url = "https://www.chd.com.cn/site/2/list/c802da7172754e8f8a3fc3bc02d7bfd7_1.html"
+purpose = "recruit"
+render = true
+
+[[source]]
+id = "chd-policy"
+unit = "chd"
+name = "中国华电·信息公开"
+url = "https://www.chd.com.cn/site/2/list/34f637118f5941e4819c93c4369d2157_1.html"
+purpose = "policy"
+render = true
+
+[[source]]
+id = "ceec-recruit"
+unit = "ceec"
+name = "中国能建·通知公告"
+url = "https://www.ceec.net.cn/col/col11018/index.html"
+purpose = "recruit"
+render = true
+
+[[source]]
+id = "sinopec-policy"
+unit = "sinopec"
+name = "中国石化·信息公开"
+url = "http://www.sinopecgroup.com/group/ggcz/index.shtml"
+purpose = "policy"
+
+[[source]]
+id = "pipechina-policy"
+unit = "pipechina"
+name = "国家管网·信息公开"
+url = "https://www.pipechina.com.cn/infor.html"
+purpose = "policy"
+
+[[source]]
+id = "pipechina-recruit"
+unit = "pipechina"
+name = "国家管网·人才招聘"
+url = "https://zhaopin.pipechina.com.cn/recruit"
+purpose = "recruit"
+render = true
+
+[[source]]
+id = "cgn-policy"
+unit = "cgn"
+name = "中广核·信息公开"
+url = "https://www.cgnpc.com.cn/cgn/c101045/lm_tt_one.shtml"
+purpose = "policy"
+
+[[source]]
+id = "spic-policy"
+unit = "spic"
+name = "国家电投·信息公开"
+url = "https://www.spic.com.cn/2021/xxgk/"
+purpose = "policy"
+render = true
+
+[[source]]
+id = "powerchina-recruit"
+unit = "powerchina"
+name = "中国电建·人才招聘"
+url = "https://www.powerchina.cn/djwq/rczp/index.html"
+purpose = "recruit"
 render = true

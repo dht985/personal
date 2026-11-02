@@ -1,0 +1,19 @@
+# 由 discover-sources 自动维护；保留已有记录，不覆盖静态人工信源。
+
+[[source]]
+id = "auto-043cbf04"
+unit = "ctg"
+purpose = "policy"
+name = "中国三峡·政策（自动发现）"
+url = "https://www.ctg.com.cn/sxjt/gywm1/zccn59/index.html"
+auto = true
+discovered_at = "2026-11-02"
+
+[[source]]
+id = "auto-63afcbc8"
+unit = "spic"
+purpose = "recruit"
+name = "国家电投·招聘（自动发现）"
+url = "https://www.spic.com.cn/2021/jrwm/"
+auto = true
+discovered_at = "2026-11-02"

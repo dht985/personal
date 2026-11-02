@@ -19,6 +19,15 @@ $stamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 Write-Log "[$stamp] career-weekly started"
 
 try {
+    $discLog = Join-Path $outbox "discover.log"
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    python -m cw discover-sources --limit 4 *> $discLog
+    $ErrorActionPreference = $prevEap
+    if (Test-Path -LiteralPath $discLog) {
+        Get-Content -LiteralPath $discLog -Encoding UTF8 | ForEach-Object { Write-Log $_ }
+    }
+
     $runLog = Join-Path $outbox "last-run.log"
     $prev = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
