@@ -56,6 +56,8 @@ CREATE TABLE IF NOT EXISTS competitions (
     last_changed       TEXT,
     ynu_verdict        TEXT,
     ynu_evidence       TEXT,
+    ynu_support_score  REAL,
+    ynu_support_label  TEXT,
     mentor_dependency  TEXT,
     difficulty         TEXT,
     requirement_evidence TEXT,
@@ -135,6 +137,8 @@ TRACKED_FIELDS = [
     "name",
     "catalog_category",
     "tier",
+    "score_total",
+    "ynu_support_score",
     "registration_first",
     "registration_last",
     "registration_next",
@@ -203,6 +207,8 @@ class Store:
             ("submission_time_text", "ALTER TABLE competitions ADD COLUMN submission_time_text TEXT"),
             ("schedule_evidence", "ALTER TABLE competitions ADD COLUMN schedule_evidence TEXT"),
             ("deadline_reliability", "ALTER TABLE competitions ADD COLUMN deadline_reliability TEXT"),
+            ("ynu_support_score", "ALTER TABLE competitions ADD COLUMN ynu_support_score REAL"),
+            ("ynu_support_label", "ALTER TABLE competitions ADD COLUMN ynu_support_label TEXT"),
         ):
             if column not in comp_cols:
                 self.conn.execute(ddl)
@@ -304,6 +310,8 @@ class Store:
             "ynu_verdict": rec.get("ynu_verdict"),
             "ynu_evidence": json.dumps(rec.get("ynu_profile") or {}, ensure_ascii=False)
             if rec.get("ynu_profile") else None,
+            "ynu_support_score": rec.get("ynu_support_score"),
+            "ynu_support_label": rec.get("ynu_support_label"),
             "mentor_dependency": rec.get("mentor_dependency"),
             "difficulty": rec.get("difficulty"),
             "requirement_evidence": json.dumps(rec.get("requirement") or {}, ensure_ascii=False)

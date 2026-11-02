@@ -24,10 +24,9 @@ DIM_LABEL = {"awareness": "知名度", "mentor": "导师资源", "awards": "获�
 
 def profile_tags(record: dict) -> str:
     """给表格/卡片用的紧凑标签，例如「充足·可自主」。"""
-    profile = record.get("ynu_profile") or {}
-    verdict = VERDICT_LABEL.get(profile.get("verdict"), "未评估")
+    support = record.get("ynu_support_score")
     mentor = MENTOR_LABEL.get(record.get("mentor_dependency"), "未判定")
-    return f"{verdict}·{mentor}"
+    return f"云大{support if support is not None else '—'}/15·{mentor}"
 
 
 def best_notice(record: dict) -> dict | None:
@@ -99,7 +98,10 @@ def render_card(record: dict, catalog_meta: dict) -> str:
             ("✓" if dims.get(k, {}).get("status") == "found" else "✗") + DIM_LABEL[k] + " "
             for k in ("awareness", "mentor", "awards")
         )
-        add(f"- 云大支撑：**{VERDICT_LABEL.get(profile.get('verdict'), '未评估')}**（{found.strip()}）")
+        add(
+            f"- 云大落地：**{record.get('ynu_support_score', 0)}/15"
+            f"（{record.get('ynu_support_label', '证据不足')}）**（{found.strip()}）"
+        )
         add(f"- 完成方式：**{MENTOR_LABEL.get(record.get('mentor_dependency'), '未判定')}**"
             f"（赛事难度：{record.get('difficulty', '未判定')}）")
     est = record.get("szcp_estimate")
@@ -225,12 +227,13 @@ def render_card(record: dict, catalog_meta: dict) -> str:
 
 def _summary_table(records: list[dict]) -> list[str]:
     lines = [
-        "| 赛事 | 目录类别 | 适配度 | 报名截止 | 状态 | 总分 | 云大·完成方式 |",
-        "| --- | --- | --- | --- | --- | --- | --- |",
+        "| 排名 | 赛事 | 目录类别 | 适配度 | 报名截止 | 状态 | 总分 | 云大·完成方式 |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for r in records:
         lines.append(
-            "| {name} | {cat} | {fit} | {dl} | {st} | {score} | {tag} |".format(
+            "| {rank} | {name} | {cat} | {fit} | {dl} | {st} | {score} | {tag} |".format(
+                rank=r.get("rank", "—"),
                 name=_cell(r["name"], 34),
                 cat=r.get("catalog_category") or "未收录",
                 fit=r.get("cs_fit", ""),
@@ -305,14 +308,24 @@ def render_digest(
         add(f"- ⚠️ 本轮有 {stats['discovery_blocked_queries']} 个检索式因引擎受限未完成，"
             f"本轮的「新赛事发现」可能不完整")
     add(f"- 归并后赛事实体：{stats.get('records', 0)} 个")
-    verdicts = Counter((r.get("ynu_profile") or {}).get("verdict") for r in records)
+    support_labels = Counter(r.get("ynu_support_label") for r in records)
     add(
-        f"- 云大生态：充足 {verdicts.get('sufficient', 0)}、"
-        f"证据不充分 {verdicts.get('inconclusive', 0)}、"
-        f"待核查 {verdicts.get('pending', 0)}；"
+        f"- 云大落地：强支撑 {support_labels.get('强支撑', 0)}、"
+        f"部分支撑 {support_labels.get('部分支撑', 0)}、"
+        f"证据不足 {support_labels.get('证据不足', 0)}；"
         f"已排除 {stats.get('excluded', 0)}"
     )
     add(f"- 其中新发现：{stats.get('new_records', 0)} 个；本次检测到变化：{len(changes)} 处")
+    add("")
+
+    add("## 综合评分总榜（前 20）")
+    add("")
+    lines.extend(_summary_table(records[:20]))
+    add("")
+    add(
+        "> 完整排名见网页仪表盘和 `data/candidates.json`。"
+        "总分为 100 分制：赛事基础价值 82 + 云大落地条件 15 + 完成可行性 3。"
+    )
     add("")
 
     for tier in TIER_ORDER:

@@ -41,17 +41,39 @@
 "仅一年" = 2
 "无历史记录" = 0
 
+[campus_support]
+# 只统计云南大学/信息学院等校内官方证据，不能再用认定目录冒充活动热度。
+max = 15
+awareness_1 = 2
+awareness_2 = 3
+awareness_3plus = 5
+mentor_catalog_contact = 1
+mentor_activity = 3
+mentor_named = 5
+awards_1year = 2
+awards_2years = 4
+awards_3years = 5
+
+[completion_feasibility]
+max = 3
+self = 3
+required_with_support = 2
+required_without_support = 0
+pending = 1
+
 [tier_rules]
-# 分层规则。总分满分约 82（目录30+适配16+主办12+时效10+综测10+历年4）
+# 分层规则。满分 100 = 基础价值 82 + 云大落地 15 + 完成可行性 3。
 # 拿到计科综测细则后，综测维度对每个赛事都稳定给 10 分，是全体上移，
 # 所以门槛同步 +5，保持分层比例不变。
-focus_min_score = 67
+focus_min_score = 80
 # 学校认定为"一类/二类"的赛事直接进入重点关注（前提是适配度合格）
 focus_categories = ["一类", "二类"]
+# 目录优势不能完全绕过其它证据；一类/二类仍需达到最低综合分。
+focus_catalog_min_score = 65
 # 临近截止 + 计算机核心赛道 + 分数达标，也进入重点关注（可立即行动）
 focus_actionable_min_score = 50
 focus_min_dimensions = 2
-potential_min_score = 40
+potential_min_score = 50
 # 适配度为"弱"的赛事不可能进入重点关注
 focus_requires_cs_fit = ["核心", "相关"]
 

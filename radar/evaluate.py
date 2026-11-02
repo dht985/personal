@@ -28,6 +28,7 @@ class Dimension:
     status: str  # verified | unverified | negative
     detail: str
     evidence: list[dict] = field(default_factory=list)
+    max_score: float = 0
 
     def as_dict(self) -> dict:
         return {
@@ -37,6 +38,7 @@ class Dimension:
             "status": self.status,
             "detail": self.detail,
             "evidence": self.evidence,
+            "max_score": self.max_score,
         }
 
 
@@ -161,6 +163,135 @@ def _deadline_reliability(record: dict) -> str:
     if urls:
         return "其他公开页面"
     return "无日期"
+
+
+def _is_ynu_url(url: str) -> bool:
+    host = urlsplit(url or "").netloc.lower()
+    return host == "ynu.edu.cn" or host.endswith(".ynu.edu.cn")
+
+
+def _evidence_years(evidence: dict) -> set[str]:
+    text = f"{evidence.get('title', '')} {evidence.get('snippet', '')}"
+    return set(re.findall(r"20\d{2}", text))
+
+
+def _campus_support(record: dict, cfg: Config) -> Dimension:
+    """用可追溯的校内证据计算云大落地条件，满分 15。"""
+    weights = cfg.scoring["campus_support"]
+    profile = record.get("ynu_profile") or {}
+    dims = {item.get("key"): item for item in profile.get("dimensions", [])}
+    awareness_evidence = [
+        e for e in (dims.get("awareness") or {}).get("evidence", [])
+        if _is_ynu_url(e.get("url", ""))
+    ]
+    mentor_evidence = (dims.get("mentor") or {}).get("evidence", [])
+    award_evidence = [
+        e for e in (dims.get("awards") or {}).get("evidence", [])
+        if _is_ynu_url(e.get("url", ""))
+    ]
+
+    awareness_urls = {
+        e.get("url") or f"{e.get('title')}|{e.get('snippet')}"
+        for e in awareness_evidence
+    }
+    if len(awareness_urls) >= 3:
+        awareness = weights["awareness_3plus"]
+    elif len(awareness_urls) == 2:
+        awareness = weights["awareness_2"]
+    elif awareness_urls:
+        awareness = weights["awareness_1"]
+    else:
+        awareness = 0
+
+    named_mentor = re.compile(r"(?:指导教师|指导老师|教练)[^。；]{0,5}[:：]?\s*[\u4e00-\u9fa5]{2,4}")
+    mentor = 0
+    if any(
+        _is_ynu_url(e.get("url", ""))
+        and named_mentor.search(f"{e.get('title', '')} {e.get('snippet', '')}")
+        for e in mentor_evidence
+    ):
+        mentor = weights["mentor_named"]
+    elif any(_is_ynu_url(e.get("url", "")) for e in mentor_evidence):
+        mentor = weights["mentor_activity"]
+    elif any(e.get("source") == "catalog" for e in mentor_evidence):
+        mentor = weights["mentor_catalog_contact"]
+
+    award_years = set()
+    for evidence in award_evidence:
+        award_years |= _evidence_years(evidence)
+    if len(award_years) >= 3:
+        awards = weights["awards_3years"]
+    elif len(award_years) == 2:
+        awards = weights["awards_2years"]
+    elif award_years:
+        awards = weights["awards_1year"]
+    else:
+        awards = 0
+
+    score = min(weights["max"], awareness + mentor + awards)
+    found_parts = [
+        name for name, value in (
+            ("校内活动", awareness), ("导师指导", mentor), ("获奖先例", awards)
+        ) if value
+    ]
+    if found_parts:
+        detail = (
+            f"云大落地条件 {score}/{weights['max']} 分："
+            f"校内活动 {awareness}，导师指导 {mentor}，获奖先例 {awards}。"
+            f"有据部分：{'、'.join(found_parts)}。"
+        )
+        if score <= weights["awareness_1"]:
+            detail += (
+                "当前只是联系线索，相关校内活跃与指导资源证据不足，"
+                "不能据此证明学院热度或老师实际可用。"
+            )
+        status = "verified" if len(found_parts) >= 2 else "partially-verified"
+    else:
+        detail = (
+            "未找到可计分的云大活动、导师或获奖证据。"
+            "这不代表学校不重视该赛事，只表示本轮证据不足。"
+        )
+        status = "unverified"
+    return Dimension(
+        key="campus_support",
+        label="云大落地条件",
+        score=score,
+        status=status,
+        detail=detail,
+        evidence=(awareness_evidence + mentor_evidence + award_evidence)[:8],
+        max_score=weights["max"],
+    )
+
+
+def _completion_feasibility(record: dict, support_dim: Dimension, cfg: Config) -> Dimension:
+    """官方要求、难度与已有指导线索是否足以支持实际参赛，满分 3。"""
+    weights = cfg.scoring["completion_feasibility"]
+    dependency = record.get("mentor_dependency")
+    difficulty = record.get("difficulty", "未判定")
+    if dependency == "self":
+        score = weights["self"]
+        detail = "规则判断为可自主完成或报名，完成条件较好。"
+    elif dependency == "required" and support_dim.score >= 5:
+        score = weights["required_with_support"]
+        detail = "官方要求导师指导，但已找到校内指导线索，仍需确认老师是否可带队。"
+    elif dependency == "required":
+        score = weights["required_without_support"]
+        detail = "官方要求导师指导，但尚未找到足够明确的校内指导资源。"
+    elif dependency == "pending":
+        score = weights["pending"]
+        detail = "通知未明确导师要求，需要向组织方确认。"
+    else:
+        score = 0
+        detail = "尚未判定完成方式。"
+    return Dimension(
+        key="completion",
+        label="完成可行性",
+        score=score,
+        status="derived" if dependency else "unverified",
+        detail=f"{detail} 赛事难度：{difficulty}。",
+        evidence=(record.get("requirement") or {}).get("evidence", [])[:3],
+        max_score=weights["max"],
+    )
 
 
 def _acceptance_dimension(
@@ -369,6 +500,16 @@ def evaluate(
         )
     )
 
+    support_dim = _campus_support(record, cfg)
+    dimensions.append(support_dim)
+    dimensions.append(_completion_feasibility(record, support_dim, cfg))
+    record["ynu_support_score"] = support_dim.score
+    record["ynu_support_label"] = (
+        "强支撑" if support_dim.score >= 8
+        else "部分支撑" if support_dim.score >= 3
+        else "证据不足"
+    )
+
     total = round(sum(d.score for d in dimensions), 1)
     verified_dims = sum(
         1 for d in dimensions if d.status in ("verified", "derived", "partially-verified")
@@ -400,9 +541,15 @@ def evaluate(
     if not fit_ok:
         tier = "低优先级/证据不足"
         tier_rule = "与计算机专业适配度为弱，不进入重点关注"
-    elif record.get("catalog_category") in rules["focus_categories"]:
+    elif (
+        record.get("catalog_category") in rules["focus_categories"]
+        and total >= rules["focus_catalog_min_score"]
+    ):
         tier = "重点关注"
-        tier_rule = f"学校认定目录 {record['catalog_category']} 赛事"
+        tier_rule = (
+            f"学校认定目录 {record['catalog_category']}，"
+            f"综合分 {total} ≥ {rules['focus_catalog_min_score']}"
+        )
     elif total >= rules["focus_min_score"] and verified_dims >= rules["focus_min_dimensions"]:
         tier = "重点关注"
         tier_rule = f"总分 {total} ≥ {rules['focus_min_score']}，且有据可查的维度 {verified_dims} 个"

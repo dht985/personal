@@ -240,7 +240,11 @@ class TestEvaluate(unittest.TestCase):
         rec = evaluate(self._record(catalog_category="四类", catalog_no=100), self.cfg, self.meta)
         keys = {d["key"] for d in rec["dimensions"]}
         self.assertEqual(
-            keys, {"catalog", "acceptance", "organizer", "cs_fit", "timeliness", "history"}
+            keys,
+            {
+                "catalog", "acceptance", "organizer", "cs_fit", "timeliness",
+                "history", "campus_support", "completion",
+            },
         )
         acceptance = next(d for d in rec["dimensions"] if d["key"] == "acceptance")
         # 没有综测规则文件时，综测维度必须是"未核实"，不能因为进了目录就默认有加分
@@ -341,6 +345,63 @@ class TestEvaluate(unittest.TestCase):
         self.assertNotEqual(rec["tier"], "重点关注")
         self.assertIn("需核对", rec["deadline_detail"])
 
+    def test_campus_support_is_evidence_weighted(self):
+        profile = {
+            "dimensions": [
+                {"key": "awareness", "evidence": [
+                    {"title": "2024年校赛通知", "url": "https://jwc.ynu.edu.cn/1",
+                     "snippet": "组织竞赛", "source": "校内通知"},
+                    {"title": "2025年校赛通知", "url": "https://jwc.ynu.edu.cn/2",
+                     "snippet": "校赛报名", "source": "校内通知"},
+                    {"title": "2026年校赛通知", "url": "https://ise.ynu.edu.cn/3",
+                     "snippet": "竞赛动态", "source": "校内通知"},
+                ]},
+                {"key": "mentor", "evidence": [
+                    {"title": "竞赛集训", "url": "https://ise.ynu.edu.cn/4",
+                     "snippet": "指导教师：张三", "source": "校内通知"},
+                ]},
+                {"key": "awards", "evidence": [
+                    {"title": "2024年获奖", "url": "https://ise.ynu.edu.cn/5",
+                     "snippet": "荣获一等奖", "source": "校内通知"},
+                    {"title": "2025年获奖", "url": "https://ise.ynu.edu.cn/6",
+                     "snippet": "再获佳绩", "source": "校内通知"},
+                ]},
+            ],
+        }
+        rec = evaluate(
+            self._record(
+                catalog_category="三类", catalog_no=69, ynu_profile=profile,
+                mentor_dependency="required",
+            ),
+            self.cfg, self.meta, history_years=2,
+        )
+        dims = {d["key"]: d for d in rec["dimensions"]}
+        self.assertEqual(dims["campus_support"]["score"], 14)
+        self.assertEqual(dims["campus_support"]["max_score"], 15)
+        self.assertEqual(dims["completion"]["score"], 2)
+
+    def test_catalog_contact_alone_is_not_popularity(self):
+        profile = {
+            "dimensions": [
+                {"key": "awareness", "evidence": [
+                    {"title": "认定目录条目", "url": "",
+                     "snippet": "承办单位 软件学院", "source": "catalog"},
+                ]},
+                {"key": "mentor", "evidence": [
+                    {"title": "认定目录条目", "url": "",
+                     "snippet": "竞赛负责人 张三", "source": "catalog"},
+                ]},
+                {"key": "awards", "evidence": []},
+            ],
+        }
+        rec = evaluate(
+            self._record(catalog_category="三类", catalog_no=69, ynu_profile=profile),
+            self.cfg, self.meta,
+        )
+        support = next(d for d in rec["dimensions"] if d["key"] == "campus_support")
+        self.assertEqual(support["score"], 1)
+        self.assertIn("证据不足", support["detail"])
+
     def test_no_date_keeps_out_of_focus(self):
         """三类赛事但没有拿到任何报名时间时，不应冒充"重点关注"。"""
         rec = evaluate(
@@ -356,13 +417,13 @@ class TestEvaluate(unittest.TestCase):
         self.assertEqual(catalog_dim["status"], "negative")
         self.assertTrue(any("未收录" in r for r in rec["risks"]))
 
-    def test_focus_requires_evidence(self):
+    def test_catalog_category_alone_is_not_enough_for_focus(self):
         rec = evaluate(
             self._record(catalog_category="二类", catalog_no=8,
                          registration_last="2026-11-01"),
             self.cfg, self.meta,
         )
-        self.assertEqual(rec["tier"], "重点关注")
+        self.assertEqual(rec["tier"], "潜在机会")
 
     def test_achievement_only_cannot_be_focus(self):
         rec = evaluate(

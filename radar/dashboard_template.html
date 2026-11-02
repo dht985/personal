@@ -145,7 +145,8 @@
 const DATA = /*__DATA__*/;
 const TIER_CLASS = {"重点关注":"t-focus","潜在机会":"t-potential","低优先级/证据不足":"t-low"};
 const DIM_COLORS = {"catalog":"var(--c1)","organizer":"var(--c2)","cs_fit":"var(--c3)",
-                    "timeliness":"var(--c4)","acceptance":"var(--c5)","history":"var(--c6)"};
+                    "timeliness":"var(--c4)","acceptance":"var(--c5)","history":"var(--c6)",
+                    "campus_support":"#ca8a04","completion":"#0f766e"};
 const esc = s => String(s==null?"":s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
 document.getElementById("sub").textContent =
@@ -186,7 +187,7 @@ function card(r){
   const ev = (r.registration_evidence[0]||{}).evidence || "";
   return `<div class="card" data-key="${esc(r.key)}">
     <div class="row">
-      <h3>${esc(r.name)}</h3>
+      <h3><span class="muted">#${esc(r.rank || "—")}</span> ${esc(r.name)}</h3>
       <div class="score">${esc(r.score_total)}</div>
     </div>
     <div class="badges">
@@ -195,8 +196,8 @@ function card(r){
       <span class="badge">适配 ${esc(r.cs_fit)}</span>
       <span class="badge">${esc(r.deadline_status)}</span>
       ${r.szcp_estimate ? `<span class="badge" title="${esc(r.szcp_estimate.formula)}">综测加分 ${esc(r.szcp_estimate.capped)}/${esc(r.szcp_estimate.cap)}</span>` : ""}
-      <span class="badge ${r.ynu_verdict === 'sufficient' ? 't-ok' : (r.ynu_verdict === 'inconclusive' ? 't-warn' : '')}"
-            title="云大知名度 / 导师资源 / 获奖先例">云大 ${esc(r.ynu_label)}</span>
+      <span class="badge ${r.ynu_support_score >= 8 ? 't-ok' : (r.ynu_support_score >= 3 ? 't-warn' : '')}"
+            title="云大活动 / 导师资源 / 获奖先例">云大 ${esc(r.ynu_support_score)}/15 · ${esc(r.ynu_label)}</span>
       <span class="badge ${r.mentor_dependency === 'required' ? 't-warn' : (r.mentor_dependency === 'self' ? 't-ok' : '')}"
             title="赛事难度 ${esc(r.difficulty || '未判定')}">${esc(r.mentor_label)}</span>
     </div>
@@ -248,7 +249,7 @@ function openDetail(key){
     `${esc(r.tier)} ｜ 总分 ${esc(r.score_total)} ｜ ${esc(r.tier_reason)}`;
   const dims = r.dimensions.map(d => `<div class="dim">
       <div class="lbl">${esc(d.label)}</div>
-      <div><span class="pill">${esc(d.status)}</span> ${esc(d.score)} 分</div>
+      <div><span class="pill">${esc(d.status)}</span> ${esc(d.score)}${d.max_score ? `/${esc(d.max_score)}` : ""} 分</div>
       <div>${esc(d.detail)}
         ${(d.evidence||[]).map(e => e.quote ? `<div class="ev">原文：「${esc(e.quote)}」</div>` : "").join("")}
         ${(d.evidence||[]).map(e => e.url ? `<div><a href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.url)}</a></div>` : "").join("")}
@@ -284,7 +285,7 @@ function openDetail(key){
     <h3 style="margin-top:18px">作品/材料提交截止</h3>${submissions}
     <h3 style="margin-top:18px">云大生态评估</h3>
     ${r.ynu_profile && r.ynu_profile.dimensions && r.ynu_profile.dimensions.length
-      ? `<div class="muted">结论：<b>${esc(r.ynu_label)}</b>　
+      ? `<div class="muted">云大落地：<b>${esc(r.ynu_support_score)}/15（${esc(r.ynu_label)}）</b>　
            ${(r.ynu_profile.notes||[]).map(n=>esc(n)).join("；")}</div>
          ${r.ynu_profile.dimensions.map(d => `
            <div class="dim">

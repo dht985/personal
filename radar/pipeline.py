@@ -319,6 +319,8 @@ FIELD_CHANGE_TYPES = {
     "registration_last": "日期变化",
     "deadline_reliability": "日期来源变化",
     "tier": "等级变化",
+    "score_total": "评分变化",
+    "ynu_support_score": "云大落地评分变化",
     "catalog_category": "目录类别变化",
     "fee_text": "费用变化",
     "team_text": "组队规则变化",
@@ -332,6 +334,8 @@ FIELD_LABELS = {
     "registration_last": "报名截止",
     "deadline_reliability": "报名日期来源可信度",
     "tier": "关注等级",
+    "score_total": "综合评分",
+    "ynu_support_score": "云大落地分",
     "catalog_category": "认定目录类别",
     "fee_text": "费用",
     "team_text": "组队要求",
@@ -381,6 +385,8 @@ def _push_body(rec: dict) -> str:
         f"云南大学认定目录：{cat}",
         f"报名截止：{rec.get('registration_last') or '通知中未写明'}（{rec.get('deadline_status')}）",
         f"适配度：{rec.get('cs_fit')}",
+        f"云大落地：{rec.get('ynu_support_score', 0)}/15"
+        f"（{rec.get('ynu_support_label', '证据不足')}）",
     ]
     if rec.get("registration_evidence"):
         lines.append(f"原文依据：{rec['registration_evidence'][0].get('evidence', '')[:120]}")
@@ -1009,11 +1015,10 @@ def run_pipeline(
     stamp = date.today().isoformat()
     ordered = sorted(
         included,
-        key=lambda r: (
-            ["重点关注", "潜在机会", "低优先级/证据不足"].index(r["tier"]),
-            -(r.get("score_total") or 0),
-        ),
+        key=lambda r: (-(r.get("score_total") or 0), r["name"]),
     )
+    for rank, rec in enumerate(ordered, start=1):
+        rec["rank"] = rank
 
     # 待推送提醒：只包含新赛事、临近截止和重要变化；已推送过的不会重复出现
     pending = store.pending_pushes()
