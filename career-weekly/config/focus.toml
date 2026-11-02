@@ -1,0 +1,23 @@
+# CS 相关性较强的央国企清单（L1/L2/L3）。
+# 入选依据：有专门的软件/计算类院所，或有数字化/IT 子公司，或招聘明确需要软件/算法/数据岗。
+# 不在清单里的单位只登记、不采集。
+
+active = [
+  "cetc", "cetc-54", "cetc-28", "cetc-32", "cetc-38", "cetc-14",
+  "cetc-10", "cetc-29", "cetc-30",
+  "cec", "cec-css", "cec-kylin",
+  "norinco", "norinco-208",
+  "avic", "avic-631",
+  "cssc", "cssc-709",
+  "casic", "casic-706",
+  "casc",
+  "sgcc", "sgcc-nari", "sgcc-it", "sgcc-epri",
+  "csg", "csg-digital", "csg-epri",
+  "chnenergy", "chnenergy-digital",
+  "sinopec", "sinopec-pcitc",
+  "cnpc", "cnpc-kldigital",
+  "cgn", "cgn-ri",
+  "spic", "spic-ri",
+  "ctg", "ctg-ri",
+  "yndl", "ynu-career",
+]

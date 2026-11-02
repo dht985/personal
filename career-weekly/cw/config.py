@@ -22,6 +22,7 @@ class Config:
     tracks: list[dict]
     tags: list[dict]
     sources: list[dict]
+    focus: list[str]
 
     @property
     def data_dir(self) -> Path:
@@ -67,6 +68,8 @@ def load(base: Path | None = None) -> Config:
     l2_path = cfg_dir / "units_l2.toml"
     if l2_path.exists():
         units = units + _load(l2_path)["unit"]
+    focus_path = cfg_dir / "focus.toml"
+    focus = _load(focus_path)["active"] if focus_path.exists() else [u["id"] for u in units]
     return Config(
         base=base,
         settings=_load(cfg_dir / "settings.toml"),
@@ -74,4 +77,5 @@ def load(base: Path | None = None) -> Config:
         tracks=tracks_data.get("track", []),
         tags=tracks_data.get("tag", []),
         sources=_load(cfg_dir / "sources.toml")["source"],
+        focus=focus,
     )

@@ -36,9 +36,11 @@ def run(
     raw_items: list[dict] = []
     seen_urls: set[str] = set()
     failed: list[str] = []
-    render_urls = [s["url"] for s in cfg.sources if s.get("render")]
+    active = set(cfg.focus)
+    active_sources = [s for s in cfg.sources if s.get("unit") in active]
+    render_urls = [s["url"] for s in active_sources if s.get("render")]
     rendered = render_many(render_urls, cfg.raw_dir) if render_urls else {}
-    for src in cfg.sources:
+    for src in active_sources:
         if src.get("kind") == "manual":
             unit = units.get(src["unit"], {})
             for it in parse_manual(cfg.base / src["path"]):
@@ -183,8 +185,8 @@ def run(
     selected = selected[:max_items]
 
     stats = {
-        "sources_total": len(cfg.sources),
-        "sources_ok": len(cfg.sources) - len(failed),
+        "sources_total": len(active_sources),
+        "sources_ok": len(active_sources) - len(failed),
         "failed_sources": len(failed),
         "failed_sources_list": failed,
         "raw_items": len(raw_items),

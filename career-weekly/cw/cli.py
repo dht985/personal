@@ -72,8 +72,14 @@ def main(argv=None) -> int:
         for r in rows:
             by_unit.setdefault(r["unit_id"], {})[r["signal_type"]] = r["n"]
         kinds = ["招聘", "采购", "项目", "投资", "战略", "技术"]
-        print(f"登记单位 {len(units)}，其中有数据 {len(by_unit)}")
-        for uid, counts in sorted(by_unit.items(), key=lambda kv: (-sum(kv[1].values()), kv[0])):
+        active = set(cfg.focus)
+        active_data = {k: v for k, v in by_unit.items() if k in active}
+        inactive_data = len(by_unit) - len(active_data)
+        print(
+            f"重点关注单位 {len(active)}，其中有数据 {len(active_data)}；"
+            f"未纳入但历史有数据 {inactive_data}"
+        )
+        for uid, counts in sorted(active_data.items(), key=lambda kv: (-sum(kv[1].values()), kv[0])):
             unit = units.get(uid, {})
             detail = " ".join(f"{k}{counts.get(k,0)}" for k in kinds if counts.get(k))
             missing = [k for k in kinds if not counts.get(k)]

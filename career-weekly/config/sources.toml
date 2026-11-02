@@ -213,3 +213,22 @@ id = "cetc38-home"
 unit = "cetc-38"
 name = "38所·官网"
 url = "http://www.cetc38.com.cn/"
+
+[[source]]
+id = "kylin-home"
+unit = "cec-kylin"
+name = "麒麟软件·官网"
+url = "https://www.kylinos.cn/"
+
+[[source]]
+id = "pcitc-home"
+unit = "sinopec-pcitc"
+name = "石化盈科·官网"
+url = "http://www.pcitc.com/"
+
+[[source]]
+id = "css-home"
+unit = "cec-css"
+name = "中国软件·官网"
+url = "http://www.css.com.cn/"
+render = true

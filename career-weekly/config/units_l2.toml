@@ -46,4 +46,12 @@ unit = [
   {id="cgn-ri", name="中广核研究院有限公司", short="中广核研究院", level=2, parent="cgn", category="能源", region="深圳", tier="watch"},
   {id="cnpc-ri", name="中国石油勘探开发研究院", short="中石油勘探院", level=2, parent="cnpc", category="能源", region="北京", tier="watch"},
   {id="sinopec-ri", name="石油化工科学研究院", short="石科院", level=2, parent="sinopec", category="能源", region="北京", tier="watch"},
+  {id="cec-css", name="中国软件与技术服务股份有限公司", short="中国软件", level=2, parent="cec", category="军工", region="北京", tier="core"},
+  {id="cec-kylin", name="麒麟软件有限公司", short="麒麟软件", level=2, parent="cec", category="军工", region="天津", tier="core"},
+  {id="sgcc-nari", name="南瑞集团有限公司", short="南瑞", level=2, parent="sgcc", category="能源", region="南京", tier="core"},
+  {id="sgcc-it", name="国网信通产业集团有限公司", short="国网信通", level=2, parent="sgcc", category="能源", region="北京", tier="core"},
+  {id="chnenergy-digital", name="国能数智科技开发有限公司", short="国能数智", level=2, parent="chnenergy", category="能源", region="北京", tier="watch"},
+  {id="sinopec-pcitc", name="石化盈科信息技术有限责任公司", short="石化盈科", level=2, parent="sinopec", category="能源", region="北京", tier="core"},
+  {id="cnpc-kldigital", name="昆仑数智科技有限责任公司", short="昆仑数智", level=2, parent="cnpc", category="能源", region="北京", tier="core"},
+  {id="casic-706", name="中国航天科工二院七〇六所（计算机技术研究所）", short="706所", level=2, parent="casic", category="军工", region="北京", tier="core"},
 ]
