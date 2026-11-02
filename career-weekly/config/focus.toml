@@ -1,16 +1,33 @@
-# CS 相关性较强的央国企清单（L1/L2/L3）。
-# 入选依据：有专门的软件/计算类院所，或有数字化/IT 子公司，或招聘明确需要软件/算法/数据岗。
-# 不在清单里的单位只登记、不采集。
+# CS 相关性关注清单（不按名字字面判断）
+#
+# 入选依据（满足其一即可）：
+#   1) 有软件/计算类院所
+#   2) 有数字化/IT 子公司
+#   3) 软件密集型工程院所：雷达、控制、导航、仿真、测控、光电
+#      —— 名称可能不含"计算/软件"，但软件岗位需求大
+#   4) 招聘明确需要软件/算法/数据/嵌入式岗位
 
 active = [
+  # --- 军工：信息技术类 ---
   "cetc", "cetc-54", "cetc-28", "cetc-32", "cetc-38", "cetc-14",
-  "cetc-10", "cetc-29", "cetc-30",
+  "cetc-10", "cetc-29", "cetc-30", "cetc-55", "cetc-13",
   "cec", "cec-css", "cec-kylin",
   "norinco", "norinco-208",
   "avic", "avic-631",
   "cssc", "cssc-709",
   "casic", "casic-706",
   "casc",
+
+  # --- 军工：软件密集型总体/控制/雷达/导航院所 ---
+  "norinco-201", "norinco-202", "norinco-203", "norinco-205",
+  "norinco-206", "norinco-207", "norinco-209",
+  "avic-601", "avic-611", "avic-613", "avic-615", "avic-618",
+  "casc-1", "casc-5", "casc-8",
+  "casic-2", "casic-3", "casic-4",
+  "cssc-701", "cssc-702", "cssc-707", "cssc-716", "cssc-719",
+  "aecc", "csgc",
+
+  # --- 能源：数字化子公司 / 电科院 / 控制与调度 ---
   "sgcc", "sgcc-nari", "sgcc-it", "sgcc-epri",
   "csg", "csg-digital", "csg-epri",
   "chnenergy", "chnenergy-digital",
@@ -19,5 +36,9 @@ active = [
   "cgn", "cgn-ri",
   "spic", "spic-ri",
   "ctg", "ctg-ri",
+  "chng-ri", "cdt-ri", "chd-epri",
+  "pipechina",
+
+  # --- 本地 ---
   "yndl", "ynu-career",
 ]

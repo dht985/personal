@@ -29,6 +29,7 @@ unit = [
   {id="avic-611", name="航空工业成都飞机设计研究所（611所）", short="611所", level=2, parent="avic", category="军工", region="成都", tier="watch"},
   {id="avic-613", name="航空工业洛阳电光设备研究所（613所）", short="613所", level=2, parent="avic", category="军工", region="洛阳", tier="watch"},
   {id="avic-615", name="中国航空无线电电子研究所（615所）", short="615所", level=2, parent="avic", category="军工", region="上海", tier="watch"},
+  {id="avic-618", name="航空工业西安飞行自动控制研究所（618所）", short="618所", level=2, parent="avic", category="军工", region="西安", tier="watch"},
   {id="avic-631", name="航空工业西安航空计算技术研究所（631所）", short="631所", level=2, parent="avic", category="军工", region="西安", tier="watch"},
   {id="cssc-701", name="中国舰船研究设计中心（701所）", short="701所", level=2, parent="cssc", category="军工", region="武汉", tier="watch"},
   {id="cssc-702", name="中国船舶科学研究中心（702所）", short="702所", level=2, parent="cssc", category="军工", region="无锡", tier="watch"},
