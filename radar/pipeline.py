@@ -11,7 +11,10 @@ from .config import Config
 from .catalog import Catalog
 from .dashboard import build_payload, write_dashboard
 from .evaluate import cs_fit, evaluate, explain_tier
-from .extract import extract_fields, guess_competition_name, summarize_dates
+from .extract import (
+    extract_fields, guess_competition_name, summarize_award_ratio,
+    summarize_dates, summarize_preparation,
+)
 from .net import Fetcher
 from .notify import dispatch
 from .report import best_notice, render_card, render_digest, render_notifications
@@ -197,6 +200,29 @@ def _apply_extraction(
                     bucket.append(copy)
                     known.add(key)
 
+    ratio = summarize_award_ratio(extracted)
+    if ratio["percent"] is not None:
+        current_method = rec.get("award_ratio_method", "")
+        if (
+            not rec.get("award_ratio_text")
+            or (ratio["method"] == "award_ratio_total"
+                and current_method != "award_ratio_total")
+        ):
+            rec["award_ratio_percent"] = ratio["percent"]
+            rec["award_ratio_text"] = ratio["text"]
+            rec["award_ratio_method"] = ratio["method"]
+    ratio_evidence = rec.setdefault("award_ratio_evidence", [])
+    for item in extracted.get("award_ratio") or []:
+        copy = dict(item)
+        copy["source_url"] = source_url
+        if (
+            copy.get("value"), copy.get("evidence"), copy.get("source_url")
+        ) not in {
+            (e.get("value"), e.get("evidence"), e.get("source_url"))
+            for e in ratio_evidence
+        }:
+            ratio_evidence.append(copy)
+
 
 def _extract_notice_documents(notice: Notice) -> list[tuple[str, dict]]:
     """正文与每个可读附件分别抽取，保证证据能指向准确来源 URL。"""
@@ -321,6 +347,8 @@ FIELD_CHANGE_TYPES = {
     "tier": "等级变化",
     "score_total": "评分变化",
     "ynu_support_score": "云大落地评分变化",
+    "award_ratio_percent": "获奖比例变化",
+    "preparation_window_days": "备赛窗口变化",
     "catalog_category": "目录类别变化",
     "fee_text": "费用变化",
     "team_text": "组队规则变化",
@@ -336,6 +364,8 @@ FIELD_LABELS = {
     "tier": "关注等级",
     "score_total": "综合评分",
     "ynu_support_score": "云大落地分",
+    "award_ratio_percent": "获奖比例",
+    "preparation_window_days": "备赛窗口",
     "catalog_category": "认定目录类别",
     "fee_text": "费用",
     "team_text": "组队要求",
@@ -861,6 +891,10 @@ def run_pipeline(
         known_years |= {(n.get("published_at") or "")[:4] for n in rec["notices"]}
         known_years = {y for y in known_years if len(y) == 4}
         rec["history_years"] = sorted(known_years)
+        preparation = summarize_preparation(rec)
+        if preparation["days"] is not None:
+            rec["preparation_window_days"] = preparation["days"]
+            rec["preparation_contest_date"] = preparation["contest_date"]
 
         # ---- 云大生态评估：知名度 / 导师资源 / 获奖先例 ----
         cached_profile = None
@@ -923,6 +957,7 @@ def run_pipeline(
         rec["requirement"] = req
         rec["mentor_dependency"] = req["mentor_dependency"]
         rec["difficulty"] = req["difficulty"]
+        rec["difficulty_level"] = req["difficulty_level"]
 
         if rec["visibility"] == "excluded":
             rec["tier"] = "已排除"

@@ -200,6 +200,9 @@ function card(r){
             title="云大活动 / 导师资源 / 获奖先例">云大 ${esc(r.ynu_support_score)}/15 · ${esc(r.ynu_label)}</span>
       <span class="badge ${r.mentor_dependency === 'required' ? 't-warn' : (r.mentor_dependency === 'self' ? 't-ok' : '')}"
             title="赛事难度 ${esc(r.difficulty || '未判定')}">${esc(r.mentor_label)}</span>
+      <span class="badge">难度 ${esc(r.difficulty || "未判定")}</span>
+      <span class="badge">${r.preparation_window_days == null ? "备赛窗口未知" : `备赛 ${esc(r.preparation_window_days)} 天`}</span>
+      <span class="badge">${r.award_ratio_percent == null ? "获奖比例未知" : `获奖约 ${esc(r.award_ratio_percent)}%`}</span>
     </div>
     ${bar(r)}
     <dl class="kv">

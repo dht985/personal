@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, asdict
+from datetime import date
 
 from .textutil import find_dates, guess_publish_year, snippet_around, squeeze
 
@@ -158,6 +159,14 @@ SUBMISSION_PATTERNS = [
     ),
 ]
 
+AWARD_RATIO_TOTAL_RE = re.compile(
+    r"(?:(?:总)?获奖(?:比例|率|名额比例)|(?:总计|合计))"
+    r"[^。；;\n]{0,15}?"
+    r"(?P<pct>\d{1,3}(?:\.\d+)?)\s*%"
+)
+AWARD_LEVEL_RE = re.compile(r"一等奖|二等奖|三等奖|金奖|银奖|铜奖")
+PERCENT_RE = re.compile(r"(?<![\d.])(\d{1,3}(?:\.\d+)?)\s*%")
+
 FEE_PATTERNS = [
     ("fee_negative", r"(?P<seg>(?:不收取|无需|免收)[^。；;\n]{0,10}(?:报名费|参赛费|费用)|免费(?:报名|参加|参赛)?)"),
     ("fee_amount", r"(?P<seg>(?:报名费|参赛费|注册费|评审费)[^。；;\n]{0,10}?(?:为|是|：|:)?\s*[\d,，.]{1,8}\s*元)"),
@@ -219,6 +228,7 @@ def extract_fields(
             text, patterns, field, base_year=base_year, require_date=field in date_required
         )
         result[field] = [e.as_dict() for e in items]
+    result["award_ratio"] = _extract_award_ratios(text)
 
     # 日程按日期上下文逐条识别，避免一个长段落只保留第一个日期。
     schedule_seen = {item["value"] for item in result["contest_time"]}
@@ -295,3 +305,85 @@ def summarize_dates(extracted: dict) -> dict:
         "registration_deadlines": deadlines,
         "registration_raw": [e["evidence"] for e in reg][:3],
     }
+
+
+def _extract_award_ratios(text: str) -> list[dict]:
+    """抽取明确的获奖比例。显式“获奖比例”优先，其次汇总各等级比例。"""
+    out: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    for clause in re.split(r"[。；;\n]", text):
+        if not AWARD_LEVEL_RE.search(clause) and "获奖比例" not in clause and "获奖率" not in clause:
+            continue
+        total_match = AWARD_RATIO_TOTAL_RE.search(clause)
+        if total_match:
+            key = ("award_ratio_total", clause.strip()[:200])
+            if key not in seen:
+                seen.add(key)
+                out.append({
+                    "field": "award_ratio",
+                    "value": f"{float(total_match.group('pct')):g}%",
+                    "evidence": clause.strip()[:180],
+                    "method": "award_ratio_total",
+                    "role": "total",
+                })
+            continue
+        percentages = [float(value) for value in PERCENT_RE.findall(clause)]
+        if not percentages:
+            continue
+        # “前10%—25%”是累计名次门槛，不能把两个边界相加。
+        total = max(percentages) if "前" in clause else min(100.0, sum(percentages))
+        key = ("award_ratio_sum", clause.strip()[:200])
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({
+            "field": "award_ratio",
+            "value": f"{total:g}%",
+            "evidence": clause.strip()[:180],
+            "method": "award_level_sum",
+            "role": "aggregate",
+        })
+    return out[:3]
+
+
+def summarize_award_ratio(extracted: dict) -> dict:
+    items = extracted.get("award_ratio") or []
+    if not items:
+        return {"percent": None, "text": "", "method": ""}
+    explicit = next(
+        (item for item in items if item.get("method") == "award_ratio_total"),
+        items[0],
+    )
+    value = str(explicit.get("value", "")).rstrip("%")
+    try:
+        percent = float(value)
+    except ValueError:
+        percent = None
+    return {
+        "percent": percent,
+        "text": explicit.get("evidence", ""),
+        "method": explicit.get("method", ""),
+    }
+
+
+def summarize_preparation(record: dict) -> dict:
+    """计算报名确认后到最早比赛日之间的可用备赛窗口。"""
+    deadline = record.get("registration_next") or record.get("registration_last")
+    if not deadline:
+        return {"days": None, "contest_date": None}
+    try:
+        deadline_date = date.fromisoformat(str(deadline)[:10])
+    except ValueError:
+        return {"days": None, "contest_date": None}
+    contest_dates = []
+    for item in record.get("contest_time_evidence") or []:
+        try:
+            contest_date = date.fromisoformat(str(item.get("value", ""))[:10])
+        except ValueError:
+            continue
+        if contest_date >= deadline_date:
+            contest_dates.append(contest_date)
+    if not contest_dates:
+        return {"days": None, "contest_date": None}
+    first = min(contest_dates)
+    return {"days": (first - deadline_date).days, "contest_date": first.isoformat()}

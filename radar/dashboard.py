@@ -71,6 +71,10 @@ def build_payload(
                 "mentor_dependency": r.get("mentor_dependency"),
                 "mentor_label": MENTOR_LABEL.get(r.get("mentor_dependency"), "未判定"),
                 "difficulty": r.get("difficulty"),
+                "preparation_window_days": r.get("preparation_window_days"),
+                "preparation_contest_date": r.get("preparation_contest_date"),
+                "award_ratio_percent": r.get("award_ratio_percent"),
+                "award_ratio_text": r.get("award_ratio_text"),
                 "ynu_profile": r.get("ynu_profile") or {},
                 "requirement": r.get("requirement") or {},
                 "risks": r.get("risks", []),
@@ -142,8 +146,9 @@ def build_payload(
             "目录认定、综合测评赋分、保研价值是三个不同概念，本页分维度呈现，不互相替代。",
             "综合测评赋分已按《2023级计科综合评测细则》算出：加分 = 基础分 × 分类权重 × 获奖权重 × 排名权重，"
             "本项上限 5 分；卡片上的数值是「国家级一等奖 + 团队排名第一」的上限情形。",
-            "综合总分 100 = 赛事基础价值 82 + 云大落地条件 15 + 完成可行性 3；"
-            "云大落地分只统计可追溯的校内活动、导师和获奖证据。",
+            "综合总分 100 = 赛事基础价值 70 + 云大落地条件 15 + "
+            "难度匹配 6 + 备赛窗口 5 + 获奖比例 4；"
+            "是否需要导师只展示，不参与评分。",
             "认定目录已更新为《学校认定本科生学科竞赛目录（2026版）》；"
             "列入 2025 版但未列入 2026 版的竞赛按细则降一级计算。",
             "日期会从正文及可读 PDF/Word/Excel 附件抽取并附原文片段；"

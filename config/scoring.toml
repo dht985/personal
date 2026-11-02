@@ -2,37 +2,37 @@
 
 [catalog_score]
 # 学校认定本科生学科竞赛目录（当前 2026 版）类别 -> 分数
-"一类" = 30
-"二类" = 26
-"三类" = 20
-"四类" = 12
+"一类" = 25
+"二类" = 22
+"三类" = 17
+"四类" = 10
 "未收录" = 0
 
 [organizer_score]
 # 主办方层级 -> 分数（依据通知原文中"主办单位"等字段判断）
-"国家级" = 12
-"学会级" = 10
-"省级" = 7
-"企业级" = 5
-"校级" = 3
+"国家级" = 10
+"学会级" = 8
+"省级" = 6
+"企业级" = 4
+"校级" = 2
 "未知" = 0
 
 [cs_fit_score]
-"核心" = 16
-"相关" = 9
-"弱" = 2
+"核心" = 15
+"相关" = 8
+"弱" = 1
 
 [timeliness_score]
-"报名开放" = 10
-"30天内截止" = 8
-"90天内截止" = 5
-"未找到日期" = 2
+"报名开放" = 8
+"30天内截止" = 6
+"90天内截止" = 4
+"未找到日期" = 1
 "已截止" = 0
 
 [acceptance_score]
 # 综合测评赋分维度：分三档，避免"知道有这么回事"被当成"知道加几分"
-"赛事级赋分已核实" = 10
-"校级规则已核实" = 5
+"赛事级赋分已核实" = 8
+"校级规则已核实" = 4
 "未核实" = 0
 
 [history_score]
@@ -54,15 +54,35 @@ awards_1year = 2
 awards_2years = 4
 awards_3years = 5
 
-[completion_feasibility]
-max = 3
-self = 3
-required_with_support = 2
-required_without_support = 0
-pending = 1
+[difficulty_score]
+max = 6
+entry = 3
+medium = 6
+high = 5
+very_high = 4
+unknown = 3
+
+[preparation_time_score]
+max = 5
+# 报名确认后到最早比赛日的可用窗口；只表示时间余量，不冒充实际备赛工作量。
+days_60plus = 5
+days_30_59 = 4
+days_14_29 = 3
+days_7_13 = 2
+days_under_7 = 1
+unknown = 3
+
+[award_ratio_score]
+max = 4
+percent_30plus = 4
+percent_20_29 = 3
+percent_10_19 = 2
+percent_5_9 = 1
+percent_under_5 = 0
+unknown = 2
 
 [tier_rules]
-# 分层规则。满分 100 = 基础价值 82 + 云大落地 15 + 完成可行性 3。
+# 分层规则。满分 100 = 基础价值 70 + 云大落地 15 + 难度 6 + 备赛窗口 5 + 获奖比例 4。
 # 拿到计科综测细则后，综测维度对每个赛事都稳定给 10 分，是全体上移，
 # 所以门槛同步 +5，保持分层比例不变。
 focus_min_score = 80

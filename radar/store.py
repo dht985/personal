@@ -45,6 +45,11 @@ CREATE TABLE IF NOT EXISTS competitions (
     registration_evidence TEXT,
     submission_time_text TEXT,
     schedule_evidence TEXT,
+    award_ratio_percent REAL,
+    award_ratio_text TEXT,
+    award_ratio_evidence TEXT,
+    preparation_window_days INTEGER,
+    preparation_contest_date TEXT,
     fee_text           TEXT,
     team_text          TEXT,
     eligibility_text   TEXT,
@@ -60,6 +65,7 @@ CREATE TABLE IF NOT EXISTS competitions (
     ynu_support_label  TEXT,
     mentor_dependency  TEXT,
     difficulty         TEXT,
+    difficulty_level   INTEGER,
     requirement_evidence TEXT,
     visibility         TEXT DEFAULT 'included',
     profile_checked_at TEXT
@@ -144,6 +150,8 @@ TRACKED_FIELDS = [
     "registration_next",
     "deadline_reliability",
     "submission_time_text",
+    "award_ratio_percent",
+    "preparation_window_days",
     "fee_text",
     "team_text",
     "eligibility_text",
@@ -209,6 +217,12 @@ class Store:
             ("deadline_reliability", "ALTER TABLE competitions ADD COLUMN deadline_reliability TEXT"),
             ("ynu_support_score", "ALTER TABLE competitions ADD COLUMN ynu_support_score REAL"),
             ("ynu_support_label", "ALTER TABLE competitions ADD COLUMN ynu_support_label TEXT"),
+            ("difficulty_level", "ALTER TABLE competitions ADD COLUMN difficulty_level INTEGER"),
+            ("award_ratio_percent", "ALTER TABLE competitions ADD COLUMN award_ratio_percent REAL"),
+            ("award_ratio_text", "ALTER TABLE competitions ADD COLUMN award_ratio_text TEXT"),
+            ("award_ratio_evidence", "ALTER TABLE competitions ADD COLUMN award_ratio_evidence TEXT"),
+            ("preparation_window_days", "ALTER TABLE competitions ADD COLUMN preparation_window_days INTEGER"),
+            ("preparation_contest_date", "ALTER TABLE competitions ADD COLUMN preparation_contest_date TEXT"),
         ):
             if column not in comp_cols:
                 self.conn.execute(ddl)
@@ -293,6 +307,13 @@ class Store:
                 rec.get("registration_evidence") or [], ensure_ascii=False
             ),
             "submission_time_text": rec.get("submission_time_text"),
+            "award_ratio_percent": rec.get("award_ratio_percent"),
+            "award_ratio_text": rec.get("award_ratio_text"),
+            "award_ratio_evidence": json.dumps(
+                rec.get("award_ratio_evidence") or [], ensure_ascii=False
+            ),
+            "preparation_window_days": rec.get("preparation_window_days"),
+            "preparation_contest_date": rec.get("preparation_contest_date"),
             "schedule_evidence": json.dumps(
                 (rec.get("contest_time_evidence") or [])
                 + (rec.get("submission_evidence") or []),
@@ -314,6 +335,7 @@ class Store:
             "ynu_support_label": rec.get("ynu_support_label"),
             "mentor_dependency": rec.get("mentor_dependency"),
             "difficulty": rec.get("difficulty"),
+            "difficulty_level": rec.get("difficulty_level"),
             "requirement_evidence": json.dumps(rec.get("requirement") or {}, ensure_ascii=False)
             if rec.get("requirement") else None,
             "visibility": rec.get("visibility", "included"),

@@ -18,7 +18,10 @@ from radar.catalog import Catalog  # noqa: E402
 from radar.attachments import extract_attachment  # noqa: E402
 from radar.config import load_config  # noqa: E402
 from radar.evaluate import evaluate  # noqa: E402
-from radar.extract import extract_fields, guess_competition_name, summarize_dates  # noqa: E402
+from radar.extract import (  # noqa: E402
+    extract_fields, guess_competition_name, summarize_award_ratio,
+    summarize_dates, summarize_preparation,
+)
 from radar.store import Change, Store  # noqa: E402
 from radar.textutil import canonical_url, find_dates, normalize_name  # noqa: E402
 
@@ -133,6 +136,33 @@ class TestExtract(unittest.TestCase):
         self.assertIn("2026-09-19", contest_dates)
         self.assertNotIn("2026-11-02", contest_dates)
 
+    def test_award_ratio_prefers_explicit_total(self):
+        out = extract_fields(
+            "竞赛通知",
+            "一等奖约占5%，二等奖约占10%，三等奖约占15%，总获奖比例约30%。",
+            "u", published_at="2026-03-01",
+        )
+        summary = summarize_award_ratio(out)
+        self.assertEqual(summary["percent"], 30)
+        self.assertEqual(summary["method"], "award_ratio_total")
+
+    def test_award_ratio_does_not_sum_cumulative_thresholds(self):
+        out = extract_fields(
+            "竞赛通知",
+            "一等奖为省赛前10%，二等奖为前10%—25%，三等奖为前25%—50%。",
+            "u", published_at="2026-03-01",
+        )
+        self.assertEqual(summarize_award_ratio(out)["percent"], 50)
+
+    def test_preparation_window_uses_deadline_and_contest_date(self):
+        record = {
+            "registration_last": "2026-03-01",
+            "contest_time_evidence": [
+                {"value": "2026-03-10"}, {"value": "2026-04-15"},
+            ],
+        }
+        self.assertEqual(summarize_preparation(record)["days"], 9)
+
 
 class _BytesFetcher:
     def __init__(self, content, filename):
@@ -243,13 +273,15 @@ class TestEvaluate(unittest.TestCase):
             keys,
             {
                 "catalog", "acceptance", "organizer", "cs_fit", "timeliness",
-                "history", "campus_support", "completion",
+                "history", "campus_support", "difficulty",
+                "preparation_time", "award_ratio",
             },
         )
         acceptance = next(d for d in rec["dimensions"] if d["key"] == "acceptance")
         # 没有综测规则文件时，综测维度必须是"未核实"，不能因为进了目录就默认有加分
         self.assertEqual(acceptance["status"], "unverified")
         self.assertEqual(acceptance["score"], 0)
+        self.assertEqual(sum(d.get("max_score", 0) for d in rec["dimensions"]), 100)
 
     def test_acceptance_upgrades_only_to_school_level(self):
         szcp = {
@@ -265,7 +297,7 @@ class TestEvaluate(unittest.TestCase):
                        self.meta, szcp=szcp)
         acceptance = next(d for d in rec["dimensions"] if d["key"] == "acceptance")
         self.assertEqual(acceptance["status"], "partially-verified")
-        self.assertEqual(acceptance["score"], 5)  # 只到校级，不冒充赛事级
+        self.assertEqual(acceptance["score"], 4)  # 只到校级，不冒充赛事级
         self.assertIn("云大学〔2020〕2号", acceptance["detail"])
 
     def test_history_dimension(self):
@@ -378,7 +410,9 @@ class TestEvaluate(unittest.TestCase):
         dims = {d["key"]: d for d in rec["dimensions"]}
         self.assertEqual(dims["campus_support"]["score"], 14)
         self.assertEqual(dims["campus_support"]["max_score"], 15)
-        self.assertEqual(dims["completion"]["score"], 2)
+        self.assertEqual(dims["difficulty"]["score"], 3)
+        self.assertEqual(dims["preparation_time"]["score"], 3)
+        self.assertEqual(dims["award_ratio"]["score"], 2)
 
     def test_catalog_contact_alone_is_not_popularity(self):
         profile = {

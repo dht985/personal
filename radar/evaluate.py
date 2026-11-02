@@ -263,33 +263,103 @@ def _campus_support(record: dict, cfg: Config) -> Dimension:
     )
 
 
-def _completion_feasibility(record: dict, support_dim: Dimension, cfg: Config) -> Dimension:
-    """官方要求、难度与已有指导线索是否足以支持实际参赛，满分 3。"""
-    weights = cfg.scoring["completion_feasibility"]
-    dependency = record.get("mentor_dependency")
+def _difficulty_dimension(record: dict, cfg: Config) -> Dimension:
+    """难度匹配评分：难度高不等于价值高，避免和学校认定重复计分。"""
+    weights = cfg.scoring["difficulty_score"]
     difficulty = record.get("difficulty", "未判定")
-    if dependency == "self":
-        score = weights["self"]
-        detail = "规则判断为可自主完成或报名，完成条件较好。"
-    elif dependency == "required" and support_dim.score >= 5:
-        score = weights["required_with_support"]
-        detail = "官方要求导师指导，但已找到校内指导线索，仍需确认老师是否可带队。"
-    elif dependency == "required":
-        score = weights["required_without_support"]
-        detail = "官方要求导师指导，但尚未找到足够明确的校内指导资源。"
-    elif dependency == "pending":
-        score = weights["pending"]
-        detail = "通知未明确导师要求，需要向组织方确认。"
-    else:
-        score = 0
-        detail = "尚未判定完成方式。"
+    score = {
+        "入门": weights["entry"],
+        "中等": weights["medium"],
+        "较高": weights["high"],
+        "很高": weights["very_high"],
+    }.get(difficulty, weights["unknown"])
     return Dimension(
-        key="completion",
-        label="完成可行性",
+        key="difficulty",
+        label="难度匹配",
         score=score,
-        status="derived" if dependency else "unverified",
-        detail=f"{detail} 赛事难度：{difficulty}。",
+        status="derived" if difficulty != "未判定" else "unverified",
+        detail=(
+            f"赛事难度：{difficulty}，难度匹配分 {score}/{weights['max']}。"
+            "该分只衡量本科生参赛负荷，不替代认定目录和主办层级判断含金量。"
+        ),
         evidence=(record.get("requirement") or {}).get("evidence", [])[:3],
+        max_score=weights["max"],
+    )
+
+
+def _preparation_dimension(record: dict, cfg: Config) -> Dimension:
+    weights = cfg.scoring["preparation_time_score"]
+    days = record.get("preparation_window_days")
+    if not isinstance(days, int):
+        score = weights["unknown"]
+        status = "unverified"
+        detail = (
+            f"尚未从报名截止与比赛日期计算出可用备赛窗口，暂给中性 "
+            f"{score}/{weights['max']} 分。"
+        )
+    else:
+        if days >= 60:
+            score = weights["days_60plus"]
+        elif days >= 30:
+            score = weights["days_30_59"]
+        elif days >= 14:
+            score = weights["days_14_29"]
+        elif days >= 7:
+            score = weights["days_7_13"]
+        else:
+            score = weights["days_under_7"]
+        status = "derived"
+        detail = (
+            f"报名截止到最早比赛日有 {days} 天可用窗口，"
+            f"时间余量分 {score}/{weights['max']}。"
+            "该数值表示可用准备时间，不代表实际所需的备赛工作量。"
+        )
+    evidence = (
+        (record.get("registration_evidence") or [])[:1]
+        + (record.get("contest_time_evidence") or [])[:1]
+    )
+    return Dimension(
+        key="preparation_time",
+        label="备赛窗口",
+        score=score,
+        status=status,
+        detail=detail,
+        evidence=evidence[:2],
+        max_score=weights["max"],
+    )
+
+
+def _award_ratio_dimension(record: dict, cfg: Config) -> Dimension:
+    weights = cfg.scoring["award_ratio_score"]
+    ratio = record.get("award_ratio_percent")
+    if ratio is None:
+        score = weights["unknown"]
+        status = "unverified"
+        detail = (
+            f"通知中未抽取到明确获奖比例，暂给中性 {score}/{weights['max']} 分；"
+            "不代表获奖概率低。"
+        )
+    else:
+        ratio = float(ratio)
+        if ratio >= 30:
+            score = weights["percent_30plus"]
+        elif ratio >= 20:
+            score = weights["percent_20_29"]
+        elif ratio >= 10:
+            score = weights["percent_10_19"]
+        elif ratio >= 5:
+            score = weights["percent_5_9"]
+        else:
+            score = weights["percent_under_5"]
+        status = "verified"
+        detail = f"通知给出的获奖比例约为 {ratio:g}%，对应 {score}/{weights['max']} 分。"
+    return Dimension(
+        key="award_ratio",
+        label="获奖比例",
+        score=score,
+        status=status,
+        detail=detail,
+        evidence=(record.get("award_ratio_evidence") or [])[:3],
         max_score=weights["max"],
     )
 
@@ -342,6 +412,7 @@ def _acceptance_dimension(
                 key="acceptance", label="综合测评赋分",
                 score=sc["赛事级赋分已核实"], status="verified",
                 detail=detail, evidence=evidence,
+                max_score=sc["赛事级赋分已核实"],
             )
         return Dimension(
             key="acceptance", label="综合测评赋分",
@@ -353,6 +424,7 @@ def _acceptance_dimension(
                 f"两版都没有的赛事需要先向学院确认。"
             ),
             evidence=evidence,
+            max_score=sc["赛事级赋分已核实"],
         )
 
     bonus = (szcp or {}).get("competition_bonus")
@@ -365,6 +437,7 @@ def _acceptance_dimension(
             detail="尚未取得云南大学现行有效的本科生综合素质测评办法原文，"
                    "因此不对该赛事是否赋分、赋多少分下结论。",
             evidence=[{"type": "missing", "note": "需要人工提供或确认综测规则文件"}],
+            max_score=sc["赛事级赋分已核实"],
         )
     sources = (szcp.get("meta") or {}).get("sources", [])
     evidence = [
@@ -384,6 +457,7 @@ def _acceptance_dimension(
             "因此本维度只到校级，不判断该赛事具体加几分。"
         ),
         evidence=evidence,
+        max_score=sc["赛事级赋分已核实"],
     )
 
 
@@ -421,6 +495,7 @@ def evaluate(
                     "confidence": record.get("catalog_match_score"),
                 }
             ],
+            max_score=max(sc["catalog_score"].values()),
         )
     else:
         dim = Dimension(
@@ -431,6 +506,7 @@ def evaluate(
             detail=f"未匹配到《{catalog_meta.get('title', '云南大学认定本科生学科竞赛目录')}》中的条目。"
                    "可能是新赛事、名称差异过大，或本就不在校内认定范围内，需要人工复核。",
             evidence=[{"type": "catalog", "source": catalog_meta.get("source_url", "")}],
+            max_score=max(sc["catalog_score"].values()),
         )
     dimensions.append(dim)
 
@@ -450,6 +526,7 @@ def evaluate(
             status="verified" if level != "未知" else "unverified",
             detail=f"层级判断：{level}" if level != "未知" else "通知原文中未找到明确的主办单位表述",
             evidence=[{"type": "text", "snippet": seg}] if seg else [],
+            max_score=max(sc["organizer_score"].values()),
         )
     )
 
@@ -461,6 +538,7 @@ def evaluate(
             score=sc["cs_fit_score"][fit],
             status="derived",
             detail=f"适配度：{fit}。{fit_reason}",
+            max_score=max(sc["cs_fit_score"].values()),
         )
     )
 
@@ -476,6 +554,7 @@ def evaluate(
             status="verified" if status != "未找到日期" else "unverified",
             detail=status_detail,
             evidence=record.get("registration_evidence", [])[:2],
+            max_score=max(sc["timeliness_score"].values()),
         )
     )
 
@@ -497,12 +576,15 @@ def evaluate(
             score=hist_score,
             status=hist_status,
             detail=hist_detail,
+            max_score=max(hist_cfg.values()) if hist_cfg else 0,
         )
     )
 
     support_dim = _campus_support(record, cfg)
     dimensions.append(support_dim)
-    dimensions.append(_completion_feasibility(record, support_dim, cfg))
+    dimensions.append(_difficulty_dimension(record, cfg))
+    dimensions.append(_preparation_dimension(record, cfg))
+    dimensions.append(_award_ratio_dimension(record, cfg))
     record["ynu_support_score"] = support_dim.score
     record["ynu_support_label"] = (
         "强支撑" if support_dim.score >= 8
