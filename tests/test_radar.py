@@ -317,8 +317,8 @@ class TestEvaluate(unittest.TestCase):
         )
         self.assertEqual(rec["tier"], "低优先级/证据不足")
 
-    def test_actionable_core_competition_is_focus(self):
-        """计算机核心赛道 + 30 天内截止 + 分数达标 -> 重点关注。"""
+    def test_actionable_core_without_support_is_not_focus(self):
+        """只有截止日期但其它关键信息不足，不能仅凭临近截止升级。"""
         from datetime import date, timedelta
 
         soon = (date.today() + timedelta(days=10)).isoformat()
@@ -336,7 +336,7 @@ class TestEvaluate(unittest.TestCase):
             },
         )
         self.assertEqual(rec["deadline_status"], "30天内截止")
-        self.assertEqual(rec["tier"], "重点关注")
+        self.assertNotEqual(rec["tier"], "重点关注")
 
     def test_nearest_active_track_deadline_drives_status(self):
         from datetime import date, timedelta
@@ -410,9 +410,10 @@ class TestEvaluate(unittest.TestCase):
         dims = {d["key"]: d for d in rec["dimensions"]}
         self.assertEqual(dims["campus_support"]["score"], 14)
         self.assertEqual(dims["campus_support"]["max_score"], 15)
-        self.assertEqual(dims["difficulty"]["score"], 3)
-        self.assertEqual(dims["preparation_time"]["score"], 3)
-        self.assertEqual(dims["award_ratio"]["score"], 2)
+        self.assertEqual(dims["difficulty"]["score"], 0)
+        self.assertEqual(dims["preparation_time"]["score"], 0)
+        self.assertEqual(dims["award_ratio"]["score"], 0)
+        self.assertLess(rec["information_completeness"], 100)
 
     def test_catalog_contact_alone_is_not_popularity(self):
         profile = {
@@ -442,7 +443,7 @@ class TestEvaluate(unittest.TestCase):
             self._record(catalog_category="三类", catalog_no=69),
             self.cfg, self.meta, history_years=1,
         )
-        self.assertEqual(rec["tier"], "潜在机会")
+        self.assertEqual(rec["tier"], "低优先级/证据不足")
 
 
     def test_unlisted_competition_is_flagged(self):
@@ -457,7 +458,7 @@ class TestEvaluate(unittest.TestCase):
                          registration_last="2026-11-01"),
             self.cfg, self.meta,
         )
-        self.assertEqual(rec["tier"], "潜在机会")
+        self.assertEqual(rec["tier"], "低优先级/证据不足")
 
     def test_achievement_only_cannot_be_focus(self):
         rec = evaluate(

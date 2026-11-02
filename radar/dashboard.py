@@ -50,6 +50,7 @@ def build_payload(
                 "name": r["name"],
                 "tier": r["tier"],
                 "score_total": r.get("score_total"),
+                "information_completeness": r.get("information_completeness", 0),
                 "catalog_category": r.get("catalog_category"),
                 "catalog_no": r.get("catalog_no"),
                 "catalog_dept": r.get("catalog_dept"),

@@ -26,7 +26,7 @@
 "报名开放" = 8
 "30天内截止" = 6
 "90天内截止" = 4
-"未找到日期" = 1
+"未找到日期" = 0
 "已截止" = 0
 
 [acceptance_score]
@@ -60,7 +60,7 @@ entry = 3
 medium = 6
 high = 5
 very_high = 4
-unknown = 3
+unknown = 0
 
 [preparation_time_score]
 max = 5
@@ -70,7 +70,7 @@ days_30_59 = 4
 days_14_29 = 3
 days_7_13 = 2
 days_under_7 = 1
-unknown = 3
+unknown = 0
 
 [award_ratio_score]
 max = 4
@@ -79,7 +79,7 @@ percent_20_29 = 3
 percent_10_19 = 2
 percent_5_9 = 1
 percent_under_5 = 0
-unknown = 2
+unknown = 0
 
 [tier_rules]
 # 分层规则。满分 100 = 基础价值 70 + 云大落地 15 + 难度 6 + 备赛窗口 5 + 获奖比例 4。

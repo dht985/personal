@@ -154,6 +154,7 @@ class TestMigrationAndRetry(unittest.TestCase):
             "ynu_support_score", "ynu_support_label",
             "award_ratio_percent", "award_ratio_text", "award_ratio_evidence",
             "preparation_window_days", "preparation_contest_date", "difficulty_level",
+            "information_completeness",
         ):
             con.execute(f"ALTER TABLE competitions DROP COLUMN {column}")
         for column in ("attempts", "last_error"):
@@ -176,6 +177,7 @@ class TestMigrationAndRetry(unittest.TestCase):
         self.assertIn("award_ratio_percent", comp_cols)
         self.assertIn("preparation_window_days", comp_cols)
         self.assertIn("difficulty_level", comp_cols)
+        self.assertIn("information_completeness", comp_cols)
         self.assertIn("attempts", push_cols)
         self.assertIn("body_excerpt", notice_cols)
         row = reopened.conn.execute("SELECT name FROM competitions").fetchone()

@@ -195,6 +195,7 @@ function card(r){
       <span class="badge">目录 ${esc(r.catalog_category || "未收录")}</span>
       <span class="badge">适配 ${esc(r.cs_fit)}</span>
       <span class="badge">${esc(r.deadline_status)}</span>
+      <span class="badge" title="已核实维度占可评分维度的比例">信息完整 ${esc(r.information_completeness)}%</span>
       ${r.szcp_estimate ? `<span class="badge" title="${esc(r.szcp_estimate.formula)}">综测加分 ${esc(r.szcp_estimate.capped)}/${esc(r.szcp_estimate.cap)}</span>` : ""}
       <span class="badge ${r.ynu_support_score >= 8 ? 't-ok' : (r.ynu_support_score >= 3 ? 't-warn' : '')}"
             title="云大活动 / 导师资源 / 获奖先例">云大 ${esc(r.ynu_support_score)}/15 · ${esc(r.ynu_label)}</span>

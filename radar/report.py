@@ -227,18 +227,19 @@ def render_card(record: dict, catalog_meta: dict) -> str:
 
 def _summary_table(records: list[dict]) -> list[str]:
     lines = [
-        "| 排名 | 赛事 | 目录类别 | 适配度 | 报名截止 | 状态 | 总分 | 云大·完成方式 |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| 排名 | 赛事 | 目录类别 | 适配度 | 报名截止 | 状态 | 信息完整度 | 总分 | 云大·完成方式 |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for r in records:
         lines.append(
-            "| {rank} | {name} | {cat} | {fit} | {dl} | {st} | {score} | {tag} |".format(
+            "| {rank} | {name} | {cat} | {fit} | {dl} | {st} | {complete}% | {score} | {tag} |".format(
                 rank=r.get("rank", "—"),
                 name=_cell(r["name"], 34),
                 cat=r.get("catalog_category") or "未收录",
                 fit=r.get("cs_fit", ""),
                 dl=r.get("registration_last") or "未抽取到",
                 st=r.get("deadline_status", ""),
+                complete=r.get("information_completeness", 0),
                 score=r.get("score_total", ""),
                 tag=profile_tags(r),
             )

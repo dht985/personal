@@ -294,8 +294,8 @@ def _preparation_dimension(record: dict, cfg: Config) -> Dimension:
         score = weights["unknown"]
         status = "unverified"
         detail = (
-            f"尚未从报名截止与比赛日期计算出可用备赛窗口，暂给中性 "
-            f"{score}/{weights['max']} 分。"
+            f"尚未从报名截止与比赛日期计算出可用备赛窗口，"
+            f"信息不足按 {score}/{weights['max']} 分处理。"
         )
     else:
         if days >= 60:
@@ -336,8 +336,8 @@ def _award_ratio_dimension(record: dict, cfg: Config) -> Dimension:
         score = weights["unknown"]
         status = "unverified"
         detail = (
-            f"通知中未抽取到明确获奖比例，暂给中性 {score}/{weights['max']} 分；"
-            "不代表获奖概率低。"
+            f"通知中未抽取到明确获奖比例，信息不足按 {score}/{weights['max']} 分处理；"
+            "这不证明获奖概率低，但会降低作为优先行动对象的分数。"
         )
     else:
         ratio = float(ratio)
@@ -593,6 +593,15 @@ def evaluate(
     )
 
     total = round(sum(d.score for d in dimensions), 1)
+    completeness_fields = [
+        dim for dim in dimensions
+        if dim.key != "catalog"
+    ]
+    known_fields = sum(
+        1 for dim in completeness_fields
+        if dim.status in ("verified", "partially-verified", "derived", "negative")
+    )
+    completeness = round(100 * known_fields / len(completeness_fields)) if completeness_fields else 0
     verified_dims = sum(
         1 for d in dimensions if d.status in ("verified", "derived", "partially-verified")
     )
@@ -659,6 +668,7 @@ def evaluate(
 
     record["dimensions"] = [d.as_dict() for d in dimensions]
     record["score_total"] = total
+    record["information_completeness"] = completeness
     record["verified_dimensions"] = verified_dims
     record["tier"] = tier
     record["risks"] = risks
