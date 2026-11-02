@@ -49,7 +49,9 @@ class TestParse(unittest.TestCase):
 class TestClassify(unittest.TestCase):
     def test_signal_types(self):
         self.assertEqual(signal_type("中国电科2027届校园招聘正式启动"), "招聘")
-        self.assertEqual(signal_type("某项目招标公告"), "项目")
+        self.assertEqual(signal_type("某项目招标公告"), "采购")
+        self.assertEqual(signal_type("某项目建设正式开工"), "项目")
+        self.assertEqual(signal_type("集团完成战略投资"), "投资")
         self.assertEqual(signal_type("集团召开年度工作会议"), "战略")
         self.assertEqual(signal_type("某研究院发布技术成果"), "技术")
         self.assertIsNone(signal_type("今天天气不错"))

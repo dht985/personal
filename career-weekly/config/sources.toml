@@ -207,3 +207,9 @@ id = "cssc-home"
 unit = "cssc"
 name = "中国船舶·官网"
 url = "http://www.cssc.net.cn/"
+
+[[source]]
+id = "cetc38-home"
+unit = "cetc-38"
+name = "38所·官网"
+url = "http://www.cetc38.com.cn/"

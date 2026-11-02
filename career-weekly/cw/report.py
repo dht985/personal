@@ -4,7 +4,7 @@ import re
 from collections import Counter
 from datetime import date, datetime
 
-PRIORITY = {"招聘": 0, "项目": 1, "战略": 2, "技术": 3}
+PRIORITY = {"招聘": 0, "采购": 1, "项目": 2, "投资": 3, "战略": 4, "技术": 5}
 LEVEL_NAME = {1: "L1 集团总部", 2: "L2 院所/子公司", 3: "L3 下属部门"}
 
 

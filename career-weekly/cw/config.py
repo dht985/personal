@@ -63,10 +63,14 @@ def load(base: Path | None = None) -> Config:
     base = base or root()
     cfg_dir = base / "config"
     tracks_data = _load(cfg_dir / "tracks.toml")
+    units = _load(cfg_dir / "units.toml")["unit"]
+    l2_path = cfg_dir / "units_l2.toml"
+    if l2_path.exists():
+        units = units + _load(l2_path)["unit"]
     return Config(
         base=base,
         settings=_load(cfg_dir / "settings.toml"),
-        units=_load(cfg_dir / "units.toml")["unit"],
+        units=units,
         tracks=tracks_data.get("track", []),
         tags=tracks_data.get("tag", []),
         sources=_load(cfg_dir / "sources.toml")["source"],

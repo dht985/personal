@@ -124,7 +124,7 @@ def run(
     raw_items.sort(key=lambda x: x.get("published_at") or "", reverse=True)
     raw_items.sort(
         key=lambda x: (
-            {"招聘": 0, "项目": 1, "战略": 2, "技术": 3}[x["signal_type"]],
+            {"招聘": 0, "采购": 1, "项目": 2, "投资": 3, "战略": 4, "技术": 5}[x["signal_type"]],
             not x["is_new"],
         )
     )
@@ -150,7 +150,7 @@ def run(
     # 层级配额 + 单单位上限，避免某一家刷屏
     per_unit = int(cfg.settings["report"].get("max_items_per_unit", 3))
     quotas = {1: 8, 2: 3, 3: 1}
-    signal_quota = {"招聘": 6, "项目": 4, "战略": 2, "技术": 4}
+    signal_quota = {"招聘": 6, "采购": 2, "项目": 4, "投资": 2, "战略": 2, "技术": 4}
     selected: list[dict] = []
     used: dict[str, int] = {}
     sig_used: dict[str, int] = {}
