@@ -115,6 +115,11 @@
   </section>
 
   <section>
+    <h2>计算机相关目录覆盖缺口</h2>
+    <div id="coverage-gaps"></div>
+  </section>
+
+  <section>
     <h2 id="disc-h">主动发现通道命中</h2>
     <div id="discovery"></div>
   </section>
@@ -129,6 +134,8 @@
       <span><i style="background:var(--c4)"></i>时效性</span>
       <span><i style="background:var(--c5)"></i>综测赋分</span>
       <span><i style="background:var(--c6)"></i>历年组织</span>
+      <span><i style="background:#ca8a04"></i>云大落地</span>
+      <span><i style="background:#0f766e"></i>难度/备赛/获奖</span>
     </div>
   </section>
 </div>
@@ -344,6 +351,11 @@ document.getElementById("discovery").innerHTML = table(["标题","匹配目录",
     `<a href="${esc(d.real_url)}" target="_blank" rel="noopener">${esc(d.real_url)}</a>`]));
 document.getElementById("disc-h").textContent =
   `主动发现通道命中（显示 ${DATA.discovery.length} / 共 ${DATA.discovery_total} 条，完整清单见 data/candidates.json）`;
+document.getElementById("coverage-gaps").innerHTML = table(
+  ["目录号","类别","赛事","状态"],
+  (DATA.catalog_gaps||[]).map(g => [
+    esc(g.catalog_no), esc(g.category), esc(g.name), esc(g.status)
+  ]));
 
 render();
 </script>

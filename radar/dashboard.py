@@ -109,6 +109,8 @@ def build_payload(
         )
 
     kept = [d for d in discovery if d.get("kept")]
+    catalog_coverage = stats.get("catalog_coverage") or {}
+    catalog_gaps = stats.get("catalog_gaps") or []
     return {
         "generated_at": generated_at,
         "catalog": {
@@ -126,6 +128,16 @@ def build_payload(
             ("低优先级/证据不足", tier_counts.get("低优先级/证据不足", 0)),
             ("官方通知", stats.get("official_notices", 0)),
             ("发现通道命中", stats.get("discovery_kept", 0)),
+            (
+                "CS 目录有记录",
+                f"{catalog_coverage.get('recorded', 0)}/"
+                f"{catalog_coverage.get('cs_catalog', 0)}",
+            ),
+            (
+                "CS 目录有当年通知",
+                f"{catalog_coverage.get('current_notice', 0)}/"
+                f"{catalog_coverage.get('cs_catalog', 0)}",
+            ),
             ("本轮变化", len(changes)),
             ("本轮提醒", stats.get("notifications", 0)),
             ("云大支撑不足已排除", stats.get("excluded", 0)),
@@ -143,6 +155,16 @@ def build_payload(
             for d in kept[:40]  # 页面只展示前 40 条，完整清单看 data/candidates.json
         ],
         "discovery_total": len(kept),
+        "catalog_coverage": catalog_coverage,
+        "catalog_gaps": [
+            {
+                "catalog_no": row.get("catalog_no"),
+                "name": row.get("name"),
+                "category": row.get("category"),
+                "status": row.get("status"),
+            }
+            for row in catalog_gaps
+        ],
         "notes": [
             "目录认定、综合测评赋分、保研价值是三个不同概念，本页分维度呈现，不互相替代。",
             "综合测评赋分已按《2023级计科综合评测细则》算出：加分 = 基础分 × 分类权重 × 获奖权重 × 排名权重，"

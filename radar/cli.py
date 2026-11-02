@@ -145,6 +145,31 @@ def cmd_status(args) -> int:
     return 0
 
 
+def cmd_coverage(args) -> int:
+    """查看计算机相关认定目录赛事的发现覆盖。"""
+    cfg = load_config()
+    path = cfg.data_dir / "catalog_coverage.json"
+    if not path.exists():
+        print("尚无覆盖审计结果，先运行 python -m radar run")
+        return 1
+    data = json.loads(path.read_text(encoding="utf-8"))
+    print(
+        f"计算机相关目录赛事：{data['recorded']}/{data['cs_catalog']} 有记录；"
+        f"{data['current_notice']}/{data['cs_catalog']} 有当年通知；"
+        f"{data['official_source']}/{data['cs_catalog']} 有官方/机构来源"
+    )
+    print(f"状态：{data.get('status_counts', {})}")
+    gaps = data.get("gaps", [])
+    if gaps:
+        print(f"覆盖缺口 {len(gaps)} 项：")
+        for row in gaps:
+            print(
+                f"  {row['catalog_no']:>3} {row['category']} "
+                f"{row['name']}（{row['status']}）"
+            )
+    return 0
+
+
 def cmd_doctor(args) -> int:
     """启用自检：逐项确认工具真的可用。"""
     from .doctor import run_checks, verdict
@@ -366,6 +391,9 @@ def main(argv: list[str] | None = None) -> int:
 
     p_st = sub.add_parser("status", help="查看库内状态")
     p_st.set_defaults(func=cmd_status)
+
+    p_cov = sub.add_parser("coverage", help="查看计算机相关目录赛事的信号覆盖")
+    p_cov.set_defaults(func=cmd_coverage)
 
     p_db = sub.add_parser("db", help="查看 SQLite 库：变化、提醒、总量")
     p_db.add_argument("--limit", type=int, default=20)

@@ -53,3 +53,35 @@ list_urls = [
   "https://www.ise.ynu.edu.cn/news-list/11/",
 ]
 item_regex = "/page/\\d+/"
+
+# ---- 人工核验过的高价值赛事主办方官方入口 ----
+
+[[source]]
+id = "ncccu"
+name = "全国高校计算机能力挑战赛·新闻通知"
+authority = "org"
+scope = "national"
+parser = "generic_list"
+note = "官网新闻通知栏目；已核验赛事名称与2026年通知"
+list_urls = ["https://www.ncccu.org.cn/index/Cms/category.html"]
+item_regex = "/index/Cms/content\\.html"
+
+[[source]]
+id = "siemens-cimc"
+name = "西门子杯中国智能制造挑战赛·通知动态"
+authority = "org"
+scope = "national"
+parser = "generic_list"
+note = "赛事官网；包含2026年报名、初赛和总决赛通知"
+list_urls = ["http://www.siemenscup-cimc.org.cn/competition/index"]
+item_regex = "/notice/NoticeDetail\\?id=\\d+"
+
+[[source]]
+id = "3dds"
+name = "全国三维数字化创新设计大赛·大赛公告"
+authority = "org"
+scope = "national"
+parser = "generic_list"
+note = "赛事官网公告列表；已核验2026年赛事通知"
+list_urls = ["https://3dds.3ddl.net/index.php?ctl=Informationlist&met=newslist&type=2"]
+item_regex = "/index\\.php\\?ctl=Informationlist&met=newsdetails&id=\\d+"

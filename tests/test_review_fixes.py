@@ -14,7 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from radar.catalog import Catalog  # noqa: E402
+from radar.catalog import CatalogEntry  # noqa: E402
 from radar.config import load_config  # noqa: E402
+from radar.coverage import build_coverage  # noqa: E402
 from radar.evaluate import classify_organizer, evaluate  # noqa: E402
 from radar.store import Store  # noqa: E402
 
@@ -124,6 +126,33 @@ class TestCatalogAliasesAndStages(unittest.TestCase):
     def test_stage_suffix_does_not_rescue_different_competition(self):
         entry, _score, _method = self.catalog.match("美国大学生数学建模竞赛全球总决赛")
         self.assertIsNone(entry)
+
+    def test_catalog_coverage_distinguishes_missing_and_historical(self):
+        cfg = load_config(ROOT)
+
+        class FakeCatalog:
+            entries = [
+                CatalogEntry(1, "全国大学生软件测试大赛", "软件学院", "", "四类"),
+                CatalogEntry(2, "蓝桥杯全国大学生软件和信息技术大赛", "信息学院", "", "四类"),
+            ]
+
+        records = [{
+            "catalog_no": 1,
+            "notices": [{
+                "title": "2025年全国大学生软件测试大赛通知",
+                "published_at": "2025-09-01",
+                "authority": "official",
+                "url": "https://jwc.ynu.edu.cn/1",
+            }],
+        }]
+        result = build_coverage(FakeCatalog(), records, cfg)
+        self.assertEqual(result["cs_catalog"], 2)
+        self.assertEqual(result["recorded"], 1)
+        self.assertEqual(result["current_notice"], 0)
+        statuses = {row["catalog_no"]: row["status"] for row in result["entries"]}
+        self.assertEqual(statuses[1], "historical_only")
+        self.assertEqual(statuses[2], "missing")
+        self.assertEqual(len(result["gaps"]), 2)
 
 
 class TestMigrationAndRetry(unittest.TestCase):

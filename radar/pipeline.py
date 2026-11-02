@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .config import Config
 from .catalog import Catalog
+from .coverage import build_coverage, search_candidates
 from .dashboard import build_payload, write_dashboard
 from .evaluate import cs_fit, evaluate, explain_tier
 from .extract import (
@@ -694,6 +695,37 @@ def run_pipeline(
     )
     if use_search and not offline:
         hits = collect_discovery(cfg, fetcher, stats=stats)
+        gap_targets = search_candidates(
+            catalog, list(records.values()), cfg,
+            int(cfg.settings.get("run", {}).get("catalog_gap_search_limit", 8)),
+        )
+        stats["catalog_gap_targets"] = len(gap_targets)
+        stats["catalog_gap_queries"] = 0
+        seen_hit_urls = {canonical_url(hit.get("url", "")) for hit in hits}
+        for entry in gap_targets:
+            results, engine, ok = search_web(
+                fetcher,
+                f'"{entry.name}" {date.today().year} 报名 通知',
+                pages=1,
+                ttl_hours=24 * 14,
+            )
+            if not ok:
+                continue
+            stats["catalog_gap_queries"] += 1
+            for item in results:
+                key = canonical_url(item.get("url", ""))
+                if not key or key in seen_hit_urls:
+                    continue
+                seen_hit_urls.add(key)
+                item["catalog_seed_no"] = entry.no
+                item["real_url"] = (
+                    resolve_redirect(fetcher, item["url"])
+                    if "so.com/link" in item.get("url", "")
+                    else resolve_sogou(fetcher, item["url"])
+                    if "sogou.com/link" in item.get("url", "")
+                    else item.get("url", "")
+                )
+                hits.append(item)
         stats["discovery_hits"] = len(hits)
         # 详情预算优先给目录赛事、明确通知和当前年份结果，避免被旧攻略消耗。
         hits.sort(
@@ -775,7 +807,13 @@ def run_pipeline(
             discovered_notice = Notice(
                 source_id=f"discovery-{h.get('engine', 'search')}",
                 source_name=f"{h.get('engine', '搜索')}发现",
-                authority="aggregator",
+                authority=(
+                    "official"
+                    if "ynu.edu.cn" in real_url
+                    else "other-official"
+                    if ".edu.cn" in real_url or ".gov.cn" in real_url
+                    else "aggregator"
+                ),
                 scope="discovered",
                 url=real_url,
                 title=h["title"],
@@ -808,7 +846,7 @@ def run_pipeline(
                     "url": real_url,
                     "source_id": discovered_notice.source_id,
                     "source_name": discovered_notice.source_name,
-                    "authority": "aggregator",
+                    "authority": discovered_notice.authority,
                     "published_at": discovered_notice.published_at,
                     "list_date": None,
                     "fetched_at": discovered_notice.fetched_at,
@@ -1037,6 +1075,20 @@ def run_pipeline(
     stats["attachment_errors"] = sum(
         1 for item in attachment_documents.values() if item.get("error")
     )
+    catalog_coverage = build_coverage(catalog, list(records.values()), cfg)
+    stats["catalog_coverage"] = {
+        key: catalog_coverage[key]
+        for key in (
+            "total_catalog", "cs_catalog", "recorded", "current_notice",
+            "official_source", "status_counts",
+        )
+    }
+    stats["catalog_gaps"] = catalog_coverage["gaps"]
+    coverage_path = cfg.data_dir / "catalog_coverage.json"
+    coverage_path.write_text(
+        json.dumps(catalog_coverage, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     included = [r for r in records.values() if r.get("visibility") == "included"]
     excluded = [r for r in records.values() if r.get("visibility") == "excluded"]
     pending_profiles = [
@@ -1092,6 +1144,7 @@ def run_pipeline(
         "excluded": [_serializable(r) for r in excluded],
         "pending": [_serializable(r) for r in pending_profiles],
         "discovery": discovery,
+        "catalog_coverage": catalog_coverage,
     }
     cfg.candidates_path.parent.mkdir(parents=True, exist_ok=True)
     cfg.candidates_path.write_text(

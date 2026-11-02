@@ -309,6 +309,21 @@ def render_digest(
         add(f"- ⚠️ 本轮有 {stats['discovery_blocked_queries']} 个检索式因引擎受限未完成，"
             f"本轮的「新赛事发现」可能不完整")
     add(f"- 归并后赛事实体：{stats.get('records', 0)} 个")
+    coverage = stats.get("catalog_coverage") or {}
+    if coverage:
+        add(
+            f"- 计算机相关目录覆盖：有记录 {coverage.get('recorded', 0)}/"
+            f"{coverage.get('cs_catalog', 0)}，"
+            f"有当年通知 {coverage.get('current_notice', 0)}/"
+            f"{coverage.get('cs_catalog', 0)}，"
+            f"有官方/机构来源 {coverage.get('official_source', 0)}/"
+            f"{coverage.get('cs_catalog', 0)}"
+        )
+        if stats.get("catalog_gap_targets"):
+            add(
+                f"- 目录定向检索：{stats.get('catalog_gap_queries', 0)}/"
+                f"{stats.get('catalog_gap_targets', 0)} 个目标完成"
+            )
     support_labels = Counter(r.get("ynu_support_label") for r in records)
     add(
         f"- 云大落地：强支撑 {support_labels.get('强支撑', 0)}、"
@@ -329,6 +344,22 @@ def render_digest(
         "难度匹配 6 + 备赛窗口 5 + 获奖比例 4。"
     )
     add("")
+
+    gaps = stats.get("catalog_gaps") or []
+    if gaps:
+        add("## 计算机相关目录覆盖缺口")
+        add("")
+        add(
+            "> 这些赛事尚未找到当年通知。它们只是“未发现/未核实”，"
+            "不代表学校不组织或不值得参加。"
+        )
+        add("")
+        for gap in gaps[:20]:
+            add(
+                f"- {gap.get('category', '')} · {gap.get('name', '')}"
+                f"（{gap.get('status', '')}）"
+            )
+        add("")
 
     for tier in TIER_ORDER:
         group = [r for r in records if r["tier"] == tier]
