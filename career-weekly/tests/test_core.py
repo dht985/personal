@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import sqlite3
 import tempfile
 import unittest
 from datetime import date, timedelta
@@ -14,6 +15,7 @@ sys.path.insert(0, str(ROOT))
 from cw.classify import is_relevant, match_tracks, signal_type  # noqa: E402
 from cw.config import load, source_purpose  # noqa: E402
 from cw.discover_sources import candidate_links  # noqa: E402
+from cw.enrich import content_digest, extract_facts, parse_deadline  # noqa: E402
 from cw.llm import action_is_stale  # noqa: E402
 from cw.parse import parse_list  # noqa: E402
 from cw.report import render  # noqa: E402
@@ -114,6 +116,42 @@ class TestDiscovery(unittest.TestCase):
         self.assertTrue(any("校园招聘公告" in item["title"] for item in links))
 
 
+class TestEnrich(unittest.TestCase):
+    def test_extracts_only_source_facts(self):
+        text = (
+            "校园招聘对象为本科及以上学历。专业要求：计算机科学与技术、软件工程、"
+            "人工智能。工作地点：昆明。报名截止时间：2026年11月20日。"
+        )
+        deadline = parse_deadline(text)
+        self.assertEqual(deadline["date"], "2026-11-20")
+        facts = extract_facts("2027届技术招聘", text, [], RECENT)
+        self.assertIn("校园招聘", facts["employment_type"])
+        self.assertIn("本科及以上", facts["education"])
+        self.assertIn("人工智能", facts["technical_terms"])
+        self.assertEqual(facts["locations"], ["昆明"])
+
+    def test_deadline_prefers_end_of_range(self):
+        deadline = parse_deadline("报名时间：2026年8月31日至9月23日。")
+        self.assertEqual(deadline["date"], "2026-09-23")
+        self.assertEqual(deadline["source"], "date_range")
+
+    def test_deadline_uses_explicit_word(self):
+        deadline = parse_deadline("本次报名至2026年9月21日17时截止。")
+        self.assertEqual(deadline["date"], "2026-09-21")
+
+    def test_deadline_ignores_age_cutoff(self):
+        text = (
+            "报名时间。自公告发布之日起至2026年9月23日。"
+            "有关年龄和年限计算截至2026年8月31日。"
+        )
+        self.assertEqual(parse_deadline(text)["date"], "2026-09-23")
+
+    def test_content_digest_changes_with_attachment(self):
+        first = content_digest("公告", "正文", ["https://example.com/a.pdf"])
+        second = content_digest("公告", "正文", ["https://example.com/b.pdf"])
+        self.assertNotEqual(first, second)
+
+
 class TestStore(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -150,6 +188,74 @@ class TestStore(unittest.TestCase):
         self.assertEqual(row["detail"], "有效")
         self.assertEqual(self.store.discovery_summary(), {"accepted": 1})
 
+    def test_content_snapshot_detects_change(self):
+        item = {
+            "url": "https://example.com/job", "source_id": "s", "unit_id": "u",
+            "level": 2, "title": "招聘公告", "signal_type": "招聘",
+        }
+        self.store.upsert(item)
+        first = self.store.update_content(
+            item["url"], "hash-a", "第一版正文", {"deadline": "2026-11-01"},
+            extractor_version=2,
+        )
+        second = self.store.update_content(
+            item["url"], "hash-b", "第二版正文", {"deadline": "2026-11-20"},
+            extractor_version=2,
+        )
+        self.assertTrue(first["baseline"])
+        self.assertFalse(first["changed"])
+        self.assertTrue(second["changed"])
+        count = self.store.conn.execute(
+            "SELECT COUNT(*) AS n FROM item_snapshots"
+        ).fetchone()["n"]
+        self.assertEqual(count, 2)
+        kind = self.store.conn.execute(
+            "SELECT change_kind FROM item_snapshots ORDER BY id DESC LIMIT 1"
+        ).fetchone()["change_kind"]
+        self.assertEqual(kind, "changed")
+
+    def test_source_health_tracks_empty_then_recovers(self):
+        self.store.record_source_health("s", "empty", 0)
+        self.store.record_source_health("s", "empty", 0)
+        row = self.store.conn.execute(
+            "SELECT * FROM source_health WHERE source_id = 's'"
+        ).fetchone()
+        self.assertEqual(row["consecutive_empty"], 2)
+        self.store.record_source_health("s", "ok", 3)
+        row = self.store.conn.execute(
+            "SELECT * FROM source_health WHERE source_id = 's'"
+        ).fetchone()
+        self.assertEqual(row["consecutive_empty"], 0)
+        self.assertIsNotNone(row["last_success_at"])
+
+    def test_old_database_migration_preserves_items(self):
+        self.store.conn.close()
+        old_path = Path(self.tmp.name) / "old.db"
+        conn = sqlite3.connect(old_path)
+        conn.execute(
+            """CREATE TABLE items (
+               id INTEGER PRIMARY KEY, url TEXT UNIQUE, source_id TEXT,
+               unit_id TEXT, level INTEGER, title TEXT, signal_type TEXT,
+               published_at TEXT, tracks TEXT, tags TEXT,
+               first_seen TEXT, last_seen TEXT)"""
+        )
+        conn.execute(
+            "INSERT INTO items VALUES (1, 'https://example.com/old', 's', 'u', 1, "
+            "'旧公告', '招聘', NULL, '[]', '[]', '2026-01-01', '2026-01-01')"
+        )
+        conn.commit()
+        conn.close()
+        migrated = Store(old_path)
+        columns = {
+            row["name"] for row in migrated.conn.execute("PRAGMA table_info(items)")
+        }
+        self.assertIn("content_hash", columns)
+        self.assertIn("extractor_version", columns)
+        self.assertEqual(
+            migrated.conn.execute("SELECT COUNT(*) AS n FROM items").fetchone()["n"], 1,
+        )
+        migrated.conn.close()
+
 
 class TestActionFreshness(unittest.TestCase):
     def test_expired_action_is_detected(self):
@@ -171,6 +277,12 @@ class TestReport(unittest.TestCase):
                 "source_name": "中国电科·招聘及公告", "published_at": RECENT,
                 "source_purpose": "recruit",
                 "tracks": [], "tags": [], "is_new": True,
+                "content_changed": True,
+                "facts": {
+                    "employment_type": ["校园招聘"],
+                    "technical_terms": ["软件工程", "人工智能"],
+                    "deadline": {"date": "2027-03-01"},
+                },
                 "triage": {"include": True, "reason": "校园招聘"},
             },
             {
@@ -191,6 +303,8 @@ class TestReport(unittest.TestCase):
         self.assertIn("L2 院所/子公司", text)
         self.assertIn("https://example.com/a", text)
         self.assertIn("招聘源 1 个，政策源 2 个", text)
+        self.assertIn("🔄", text)
+        self.assertIn("技术词：软件工程、人工智能", text)
         self.assertLess(len(text), 4200)
 
 

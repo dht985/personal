@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from datetime import date
-from pathlib import Path
 import re
 
 from .classify import is_relevant, match_tags, match_tracks, signal_type
 from .browser import render_many
-from .config import Config, source_purpose
+from .config import Config
+from .enrich import enrich_items
 from .llm import triage_batch
 from .manual import parse as parse_manual
 from .net import Fetcher
@@ -42,6 +42,8 @@ def run(
     raw_items: list[dict] = []
     seen_urls: set[str] = set()
     failed: list[str] = []
+    empty_sources: list[str] = []
+    sources_with_items = 0
     active = set(cfg.focus)
     active_sources = [s for s in cfg.sources if s.get("unit") in active]
     render_urls = [s["url"] for s in active_sources if s.get("render")]
@@ -49,7 +51,15 @@ def run(
     for src in active_sources:
         if src.get("kind") == "manual":
             unit = units.get(src["unit"], {})
-            for it in parse_manual(cfg.base / src["path"]):
+            manual_items = parse_manual(cfg.base / src["path"])
+            store.record_source_health(
+                src["id"], "ok" if manual_items else "empty", len(manual_items),
+            )
+            if manual_items:
+                sources_with_items += 1
+            else:
+                empty_sources.append(src["name"])
+            for it in manual_items:
                 sig = signal_type(it["title"]) or "技术"
                 item = {
                     **it,
@@ -71,16 +81,28 @@ def run(
             html = rendered.get(src["url"], "")
             if not html:
                 failed.append(f"{src['name']}（浏览器渲染失败）")
+                store.record_source_health(src["id"], "error", 0, "浏览器渲染失败")
                 continue
             page = type("P", (), {"ok": True, "text": html, "final_url": src["url"], "status": 200})()
         else:
             page = fetcher.get(src["url"])
             if not page.ok:
                 failed.append(f"{src['name']}（{page.error or page.status}）")
+                store.record_source_health(
+                    src["id"], "error", 0, page.error or f"HTTP {page.status}",
+                )
                 continue
         unit = units.get(src["unit"], {})
         lookback = int(cfg.settings.get("run", {}).get("lookback_days", 180))
-        for it in parse_list(page.text, page.final_url, lookback_days=lookback):
+        parsed_items = parse_list(page.text, page.final_url, lookback_days=lookback)
+        store.record_source_health(
+            src["id"], "ok" if parsed_items else "empty", len(parsed_items),
+        )
+        if parsed_items:
+            sources_with_items += 1
+        else:
+            empty_sources.append(src["name"])
+        for it in parsed_items:
             sig = signal_type(it["title"])
             if sig is None:
                 continue
@@ -163,6 +185,27 @@ def run(
             triaged.append(item)
 
     included = [i for i in triaged if i["triage"]["include"]]
+    detail_stats = {"attempted": 0, "succeeded": 0, "failed": 0, "changed": 0}
+    if use_detail:
+        detail_stats = enrich_items(
+            fetcher, included, store,
+            max_items=int(cfg.settings.get("run", {}).get("detail_max_items", 24)),
+        )
+    changed_items = sum(1 for item in included if item.get("content_changed"))
+    expired_excluded = 0
+    eligible = included
+    if cfg.settings.get("run", {}).get("exclude_expired_recruitment", True):
+        eligible = []
+        for item in included:
+            deadline = ((item.get("facts") or {}).get("deadline") or {}).get("date")
+            if item.get("signal_type") == "招聘" and deadline:
+                try:
+                    if date.fromisoformat(deadline) < date.today():
+                        expired_excluded += 1
+                        continue
+                except ValueError:
+                    pass
+            eligible.append(item)
 
     # 层级配额 + 单单位上限，避免某一家刷屏
     per_unit = int(cfg.settings["report"].get("max_items_per_unit", 3))
@@ -178,7 +221,7 @@ def run(
     # 先取更具体的 L2/L3，再补集团层，避免 L1 把配额吃光
     for level in (2, 3, 1):
         taken = 0
-        for item in included:
+        for item in eligible:
             if item["level"] != level or taken >= quotas[level]:
                 continue
             if used.get(item["unit_id"], 0) >= per_unit:
@@ -190,7 +233,7 @@ def run(
             sig_used[item["signal_type"]] = sig_used.get(item["signal_type"], 0) + 1
             level_used[level] = level_used.get(level, 0) + 1
             taken += 1
-    for item in included:
+    for item in eligible:
         if len(selected) >= max_items:
             break
         if item in selected or used.get(item["unit_id"], 0) >= per_unit:
@@ -205,22 +248,30 @@ def run(
     stats = {
         "sources_total": len(active_sources),
         "sources_ok": len(active_sources) - len(failed),
+        "sources_with_items": sources_with_items,
+        "empty_sources": len(empty_sources),
+        "empty_sources_list": empty_sources,
         "failed_sources": len(failed),
         "failed_sources_list": failed,
         "raw_items": len(raw_items),
         "new_items": sum(1 for i in raw_items if i["is_new"]),
+        "changed_items": changed_items,
+        "expired_excluded": expired_excluded,
         "duplicates": duplicates,
         "triaged": len(triaged),
         "ai_included": len(included),
         "ai_excluded": len(triaged) - len(included),
         "triage_fallback_batches": fallback_batches,
         "llm_fallbacks": fallback_batches,
-        "detail_fetched": 0,
+        "detail_attempted": detail_stats["attempted"],
+        "detail_fetched": detail_stats["succeeded"],
+        "detail_failed": detail_stats["failed"],
         "source_purposes": {
             kind: sum(1 for src in active_sources if src["purpose"] == kind)
             for kind in ("recruit", "policy", "news")
         },
         "filter_mode": "llm" if use_llm else "rules",
+        "unhealthy_sources": store.unhealthy_sources(),
     }
     text = render(selected, cfg, stats)
     out = cfg.outbox_dir / f"weekly-{date.today().isoformat()}.md"

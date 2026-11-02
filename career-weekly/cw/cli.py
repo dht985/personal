@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import os
 import sys
 
@@ -25,6 +26,10 @@ def main(argv=None) -> int:
     p.add_argument("--no-detail", action="store_true", help="不抓取详情正文，只用标题")
 
     sub.add_parser("status", help="查看数据库状态")
+    sub.add_parser("health", help="查看信源健康与连续空结果")
+    sub.add_parser("changes", help="查看已检测到的正文变化")
+    p_due = sub.add_parser("due", help="判断是否超过指定时间未成功运行")
+    p_due.add_argument("--max-age-hours", type=float, default=144)
     sub.add_parser("discover", help="发现 L3 部门/实验室候选")
     sub.add_parser("open", help="打开最新一期周报")
     sub.add_parser("coverage", help="查看各单位的数据覆盖（招聘/采购/项目/投资等）")
@@ -39,12 +44,75 @@ def main(argv=None) -> int:
             use_detail=not args.no_detail,
         )
         print(f"\n周报：{stats['report']}（{stats['chars']} 字符）")
-        print(f"信源 {stats['sources_ok']}/{stats['sources_total']}，条目 {stats['raw_items']}，"
+        print(f"信源可达 {stats['sources_ok']}/{stats['sources_total']}，"
+              f"解析有内容 {stats['sources_with_items']}，"
+              f"空结果 {stats['empty_sources']}，条目 {stats['raw_items']}，"
               f"新增 {stats['new_items']}，模型回退 {stats['llm_fallbacks']}")
-        print(f"正文抓取：{stats.get('detail_fetched', 0)} 条")
+        print(
+            f"详情增强：{stats.get('detail_fetched', 0)}/"
+            f"{stats.get('detail_attempted', 0)} 条，"
+            f"变化 {stats.get('changed_items', 0)} 条，"
+            f"截止招聘隐藏 {stats.get('expired_excluded', 0)} 条"
+        )
         return 0
 
     cfg = load()
+    if args.cmd == "due":
+        if not cfg.db_path.exists():
+            return 20
+        store = Store(cfg.db_path)
+        row = store.conn.execute(
+            """SELECT finished_at FROM runs
+               WHERE finished_at IS NOT NULL ORDER BY id DESC LIMIT 1"""
+        ).fetchone()
+        store.conn.close()
+        if row is None:
+            return 20
+        last = datetime.fromisoformat(row["finished_at"])
+        current = datetime.now().astimezone()
+        if last.tzinfo is None:
+            last = last.astimezone()
+        age_hours = (current - last).total_seconds() / 3600
+        print(f"距上次成功运行 {age_hours:.1f} 小时")
+        return 20 if age_hours >= args.max_age_hours else 0
+    if args.cmd == "health":
+        if not cfg.db_path.exists():
+            print("还没有数据库")
+            return 0
+        store = Store(cfg.db_path)
+        rows = store.conn.execute(
+            """SELECT * FROM source_health
+               ORDER BY consecutive_error DESC, consecutive_empty DESC,
+                        last_checked_at DESC"""
+        ).fetchall()
+        source_names = {source["id"]: source["name"] for source in cfg.sources}
+        print(f"信源健康记录：{len(rows)}")
+        for row in rows:
+            name = source_names.get(row["source_id"], row["source_id"])
+            print(
+                f"  {name}: {row['last_status']}，条目 {row['last_item_count']}，"
+                f"连续空 {row['consecutive_empty']}，连续失败 {row['consecutive_error']}，"
+                f"最近成功 {row['last_success_at'] or '无'}"
+            )
+        store.conn.close()
+        return 0
+    if args.cmd == "changes":
+        if not cfg.db_path.exists():
+            print("还没有数据库")
+            return 0
+        store = Store(cfg.db_path)
+        rows = store.conn.execute(
+            """SELECT s.captured_at, s.title, i.url, s.previous_hash, s.content_hash
+               FROM item_snapshots s JOIN items i ON i.id = s.item_id
+               WHERE s.change_kind = 'changed'
+               ORDER BY s.id DESC LIMIT 20"""
+        ).fetchall()
+        print(f"已检测到正文变化：{len(rows)} 条（最多显示 20 条）")
+        for row in rows:
+            print(f"  {row['captured_at'][:19]}  {row['title'][:60]}")
+            print(f"    {row['url']}")
+        store.conn.close()
+        return 0
     if args.cmd == "discover-sources":
         from .discover_sources import discover, save
 

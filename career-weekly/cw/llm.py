@@ -8,6 +8,7 @@ import requests
 
 THINK_RE = re.compile(r"<think(?:ing)?>.*?</think(?:ing)?>", re.S)
 NUM_RE = re.compile(r"\d+(?:\.\d+)?")
+REASON_LABELS = ("技术招聘", "校园招聘", "技术项目", "研发方向", "政策文件", "低价值新闻")
 
 TRIAGE_PROMPT = """你是信息筛选器。读者是云南大学计算机专业本科生，关注能源/军工类央国企的计算机相关就业信息。
 下面是一批公开信息标题。请逐条判断是否值得收录进周报。
@@ -20,14 +21,37 @@ TRIAGE_PROMPT = """你是信息筛选器。读者是云南大学计算机专业�
 - 与计算机就业无关的行政、财务、审计、后勤
 - 重复或信息量极低的导航页
 
-不要做深层解读，只判断收录与否。理由不超过 20 字，且不要出现任何数字。
+不要做深层解读，只判断收录与否。reason 必须严格从以下标签中选一个：
+技术招聘、校园招聘、技术项目、研发方向、政策文件、低价值新闻。
 
 条目：
 {items}
 
 只输出 JSON：
-{{"decisions": [{{"i": 0, "include": true, "reason": "技术岗位招聘"}}, ...]}}
+{{"decisions": [{{"i": 0, "include": true, "reason": "技术招聘"}}, ...]}}
 """
+
+
+def _reason_label(reason: str, item: dict) -> str:
+    reason = str(reason or "").strip()
+    if reason in REASON_LABELS:
+        return reason
+    if "校园" in reason or "校招" in reason:
+        return "校园招聘"
+    if "招聘" in reason or "岗位" in reason:
+        return "技术招聘"
+    if "政策" in reason or "制度" in reason or "规划" in reason:
+        return "政策文件"
+    if "项目" in reason or "科研" in reason or "成果" in reason:
+        return "技术项目"
+    if "技术" in reason or "研发" in reason or "算法" in reason or "人工智能" in reason:
+        return "研发方向"
+    return {
+        "招聘": "技术招聘",
+        "政策": "政策文件",
+        "项目": "技术项目",
+        "技术": "研发方向",
+    }.get(item.get("signal_type", ""), "低价值新闻")
 
 
 def triage_batch(items: list[dict], settings: dict) -> dict[int, dict]:
@@ -61,9 +85,9 @@ def triage_batch(items: list[dict], settings: dict) -> dict[int, dict]:
                 i = int(d.get("i"))
             except (TypeError, ValueError):
                 continue
-            reason = str(d.get("reason", "")).strip()[:30]
-            reason = NUM_RE.sub("", reason).strip("，。 ;")
-            out[i] = {"include": bool(d.get("include")), "reason": reason or "规则命中"}
+            reason = _reason_label(d.get("reason", ""), items[i] if 0 <= i < len(items) else {})
+            include = bool(d.get("include")) and reason != "低价值新闻"
+            out[i] = {"include": include, "reason": reason, "method": "llm"}
         return out
     except Exception:  # noqa: BLE001
         return {}

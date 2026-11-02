@@ -11,6 +11,20 @@ from .config import Config
 
 
 @dataclass
+class BinaryPage:
+    url: str
+    final_url: str
+    status: int | None
+    content: bytes
+    content_type: str
+    error: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.status == 200 and not self.error
+
+
+@dataclass
 class Page:
     url: str
     final_url: str
@@ -68,3 +82,42 @@ class Fetcher:
                 time.sleep(1.2 * attempt)
         self.stats["errors"] += 1
         return Page(url, url, None, "", error=err or "request failed")
+
+    def get_bytes(self, url: str, max_bytes: int = 12 * 1024 * 1024) -> BinaryPage:
+        host = urllib.parse.urlsplit(url).netloc
+        err = ""
+        for attempt in range(1, self.retries + 1):
+            self._throttle(host)
+            try:
+                with self.session.get(
+                    url, timeout=self.timeout, allow_redirects=True, stream=True,
+                ) as response:
+                    self.stats["requests"] += 1
+                    content_type = response.headers.get("Content-Type", "")
+                    if response.status_code >= 500 and attempt < self.retries:
+                        err = f"HTTP {response.status_code}"
+                        time.sleep(1.2 * attempt)
+                        continue
+                    chunks = []
+                    size = 0
+                    for chunk in response.iter_content(64 * 1024):
+                        if not chunk:
+                            continue
+                        size += len(chunk)
+                        if size > max_bytes:
+                            return BinaryPage(
+                                url, response.url, response.status_code, b"",
+                                content_type, "文件超过大小限制",
+                            )
+                        chunks.append(chunk)
+                    key = hashlib.sha1(url.encode("utf-8")).hexdigest()
+                    content = b"".join(chunks)
+                    (self.raw_dir / f"{key}.bin").write_bytes(content)
+                    return BinaryPage(
+                        url, response.url, response.status_code, content, content_type,
+                    )
+            except requests.RequestException as exc:
+                err = type(exc).__name__
+                time.sleep(1.2 * attempt)
+        self.stats["errors"] += 1
+        return BinaryPage(url, url, None, b"", "", error=err or "request failed")

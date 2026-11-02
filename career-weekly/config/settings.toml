@@ -23,6 +23,8 @@ max_items_per_unit = 3
 [run]
 # 列表页可能含多年归档；只保留半年内的条目
 lookback_days = 365
+detail_max_items = 24
+exclude_expired_recruitment = true
 
 [llm]
 enabled = true

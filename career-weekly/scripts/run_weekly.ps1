@@ -1,4 +1,6 @@
 # Weekly run of career intelligence. ASCII-only on purpose.
+param([switch]$Force)
+
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
@@ -9,6 +11,7 @@ $env:PYTHONIOENCODING = "utf-8"
 $outbox = Join-Path $projectDir "outbox"
 if (-not (Test-Path -LiteralPath $outbox)) { New-Item -ItemType Directory -Path $outbox | Out-Null }
 $logFile = Join-Path $outbox "run.log"
+$lockFile = Join-Path $outbox ".run.lock"
 
 function Write-Log([string]$Message) {
     Write-Output $Message
@@ -18,7 +21,27 @@ function Write-Log([string]$Message) {
 $stamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 Write-Log "[$stamp] career-weekly started"
 
+if (Test-Path -LiteralPath $lockFile) {
+    $lockAge = (Get-Date) - (Get-Item -LiteralPath $lockFile).LastWriteTime
+    if ($lockAge.TotalMinutes -lt 120) {
+        Write-Log "[$stamp] another run is active; skipped"
+        exit 0
+    }
+    Remove-Item -LiteralPath $lockFile -Force
+}
+New-Item -ItemType File -Path $lockFile -Force | Out-Null
+
 try {
+    if (-not $Force) {
+        python -m cw due --max-age-hours 144
+        $dueCode = $LASTEXITCODE
+        if ($dueCode -eq 0) {
+            Write-Log "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] no run due"
+            exit 0
+        }
+        if ($dueCode -ne 20) { throw "cw due exited with code $dueCode" }
+    }
+
     $discLog = Join-Path $outbox "discover.log"
     $prevEap = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
@@ -43,5 +66,9 @@ try {
 }
 catch {
     Write-Log "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] FAILED: $($_.Exception.Message)"
+    Remove-Item -LiteralPath $lockFile -Force -ErrorAction SilentlyContinue
     exit 1
+}
+finally {
+    Remove-Item -LiteralPath $lockFile -Force -ErrorAction SilentlyContinue
 }

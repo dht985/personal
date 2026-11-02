@@ -6,12 +6,15 @@ $taskName = "CareerWeekly"
 
 $action = New-ScheduledTaskAction -Execute "powershell.exe" `
     -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`""
-$trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday -At 9am
+$weeklyTrigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday -At 9am
+$logonTrigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable `
-    -DontStopOnIdleEnd -ExecutionTimeLimit (New-TimeSpan -Hours 1)
+    -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -DontStopOnIdleEnd `
+    -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 1)
 
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
+Register-ScheduledTask -TaskName $taskName -Action $action `
+    -Trigger @($weeklyTrigger, $logonTrigger) `
     -Settings $settings -Description "Weekly career intelligence report" -Force | Out-Null
 
-Write-Output "Scheduled task registered: $taskName (every Monday 09:00)"
+Write-Output "Scheduled task registered: $taskName (Monday 09:00 + logon catch-up)"
 Write-Output "Run now: Start-ScheduledTask -TaskName '$taskName'"
