@@ -79,6 +79,10 @@ def main(argv=None) -> int:
             f"重点关注单位 {len(active)}，其中有数据 {len(active_data)}；"
             f"未纳入但历史有数据 {inactive_data}"
         )
+        print("数据覆盖统计：")
+        for k in kinds:
+            n = sum(1 for v in active_data.values() if k in v)
+            print(f"  {k}: {n} 个单位有数据")
         for uid, counts in sorted(active_data.items(), key=lambda kv: (-sum(kv[1].values()), kv[0])):
             unit = units.get(uid, {})
             detail = " ".join(f"{k}{counts.get(k,0)}" for k in kinds if counts.get(k))
